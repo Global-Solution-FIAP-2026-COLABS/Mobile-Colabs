@@ -115,7 +115,7 @@ export default function LoginOrgScreen() {
           <View style={styles.footer}>
             <TouchableOpacity
               style={styles.button}
-              onPress={() => router.push("/AuthScreen/LoginPersonScreen")}
+              onPress={() => router.push("/OrgScreens/HomeInstitution")}
               activeOpacity={0.8}
             >
               <Text style={styles.buttonText}>Entrar</Text>
