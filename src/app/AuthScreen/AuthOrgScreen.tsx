@@ -13,10 +13,14 @@ import {
 } from "react-native";
 import { router } from "expo-router";
 
+import { useRegister } from "../../hooks/useAuth";
+import type { RegisterRequest } from "../../types/authTypes";
+
 type FormData = {
   name: string;
   cnpj: string;
   address: string;
+  phone: string;
   email: string;
   password: string;
 };
@@ -26,9 +30,12 @@ export default function AuthOrgScreen() {
     name: "",
     cnpj: "",
     address: "",
+    phone: "",
     email: "",
     password: "",
   });
+
+  const registerMutation = useRegister();
 
   function updateFormData(field: keyof FormData, value: string) {
     setFormData((prev) => ({
@@ -48,23 +55,90 @@ export default function AuthOrgScreen() {
       .replace(/(\d{4})(\d)/, "$1-$2");
   }
 
-  function handleRegister() {
+  async function handleRegister() {
     const { name, cnpj, address, email, password } = formData;
+    const phoneNumbers = formData.phone.replace(/\D/g, "");
 
-    if (!name || !cnpj || !address || !email || !password) {
+    if (
+      !name.trim() ||
+      !cnpj ||
+      !address.trim() ||
+      !email.trim() ||
+      !password
+    ) {
       Alert.alert("Atenção", "Preencha todos os campos.");
       return;
     }
 
-    if (cnpj.replace(/\D/g, "").length !== 14) {
+    const cnpjNumbers = cnpj.replace(/\D/g, "");
+
+    if (cnpjNumbers.length !== 14) {
       Alert.alert("CNPJ inválido", "Informe um CNPJ com 14 dígitos.");
       return;
     }
 
-    Alert.alert(
-      "Cadastro",
-      "Dados validados! Agora podemos integrar o cadastro com a API.",
-    );
+    if (name.trim().length < 3 || name.trim().length > 120) {
+      Alert.alert("Nome inválido", "O nome deve ter entre 3 e 120 caracteres.");
+      return;
+    }
+
+    if (address.trim().length < 5 || address.trim().length > 200) {
+      Alert.alert(
+        "Endereço inválido",
+        "O endereço deve ter entre 5 e 200 caracteres.",
+      );
+      return;
+    }
+
+    if (phoneNumbers.length < 10 || phoneNumbers.length > 20) {
+      Alert.alert("Telefone inválido", "Informe um telefone com DDD.");
+      return;
+    }
+
+    if (password.length < 6 || password.length > 100) {
+      Alert.alert(
+        "Senha inválida",
+        "A senha deve ter entre 6 e 100 caracteres.",
+      );
+      return;
+    }
+
+    const data: RegisterRequest = {
+      accountType: "COLLECTION_POINT",
+      email: email.trim(),
+      password,
+      name: name.trim(),
+      phone: phoneNumbers,
+      address: address.trim(),
+      cpf: null,
+      cnpj: cnpjNumbers,
+      neighborhood: null,
+      active: true,
+    };
+
+    try {
+      await registerMutation.mutateAsync(data);
+
+      Alert.alert(
+        "Cadastro realizado!",
+        "Sua instituição foi cadastrada com sucesso.",
+        [
+          {
+            text: "Ir para login",
+            onPress: () => {
+              router.replace("/AuthScreen/LoginOrgScreen");
+            },
+          },
+        ],
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Não foi possível realizar o cadastro. Tente novamente.";
+
+      Alert.alert("Erro no cadastro", message);
+    }
   }
 
   return (
@@ -144,6 +218,17 @@ export default function AuthOrgScreen() {
               multiline
             />
 
+            <Text style={styles.label}>Telefone</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="(11) 99999-9999"
+              placeholderTextColor="#A0AAA4"
+              value={formData.phone}
+              onChangeText={(value) => updateFormData("phone", value)}
+              keyboardType="phone-pad"
+              maxLength={15}
+            />
+
             {/* Location */}
             <View style={styles.locationBox}>
               <View style={styles.locationIcon}>
@@ -190,32 +275,25 @@ export default function AuthOrgScreen() {
           </View>
 
           {/* Register button */}
-          <View style={styles.footer}>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={handleRegister}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.buttonText}>Cadastrar instituição</Text>
-
-              <Text style={styles.buttonArrow}>→</Text>
-            </TouchableOpacity>
-
-            <View style={styles.loginContainer}>
-              <Text style={styles.loginText}>Já possui uma conta?</Text>
-
-              <TouchableOpacity
-                onPress={() => router.push("/AuthScreen/LoginOrgScreen")}
-              >
-                <Text style={styles.loginLink}> Entrar</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.footerText}>
-              Juntos podemos transformar vidas e fortalecer
-              {"\n"}nossa comunidade.
+          <TouchableOpacity
+            style={[
+              styles.button,
+              registerMutation.isPending && { opacity: 0.6 },
+            ]}
+            onPress={handleRegister}
+            activeOpacity={0.8}
+            disabled={registerMutation.isPending}
+          >
+            <Text style={styles.buttonText}>
+              {registerMutation.isPending
+                ? "Cadastrando..."
+                : "Cadastrar instituição"}
             </Text>
-          </View>
+
+            {!registerMutation.isPending && (
+              <Text style={styles.buttonArrow}>→</Text>
+            )}
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -346,6 +424,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    marginTop: 20,
   },
   buttonText: {
     color: "#FFFFFF",

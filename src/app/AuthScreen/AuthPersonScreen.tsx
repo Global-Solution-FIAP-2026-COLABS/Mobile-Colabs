@@ -11,26 +11,34 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import { router } from "expo-router";
+import { router} from "expo-router";
+
+import { useRegister } from "../../hooks/useAuth";
+import type { RegisterRequest } from "../../types/authTypes";
 
 type FormData = {
   name: string;
   cpf: string;
+  phone: string;
   address: string;
   email: string;
   password: string;
 };
 
 export default function AuthPersonScreen() {
+  
   const [formData, setFormData] = useState<FormData>({
     name: "",
     cpf: "",
+    phone: "",
     address: "",
     email: "",
     password: "",
   });
 
-  // Atualiza um campo sem perder os demais
+  const registerMutation = useRegister();
+
+
   function updateFormData(field: keyof FormData, value: string) {
     setFormData((prev) => ({
       ...prev,
@@ -47,23 +55,87 @@ export default function AuthPersonScreen() {
       .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
   }
 
-  function handleRegister() {
-    const { name, cpf, address, email, password } = formData;
+  // Cadastro integrado à API
+  async function handleRegister() {
+    const { name, cpf, phone, address, email, password } = formData;
 
-    if (!name || !cpf || !address || !email || !password) {
+    if (
+      !name.trim() ||
+      !cpf ||
+      !phone ||
+      !address.trim() ||
+      !email.trim() ||
+      !password
+    ) {
       Alert.alert("Atenção", "Preencha todos os campos.");
       return;
     }
 
-    if (cpf.replace(/\D/g, "").length !== 11) {
+    const cpfNumbers = cpf.replace(/\D/g, "");
+    const phoneNumbers = phone.replace(/\D/g, "");
+
+    if (cpfNumbers.length !== 11) {
       Alert.alert("CPF inválido", "Informe um CPF com 11 dígitos.");
       return;
     }
 
-    Alert.alert(
-      "Cadastro",
-      "Dados validados! Agora podemos integrar o cadastro com a API.",
-    );
+    if (phoneNumbers.length < 10 || phoneNumbers.length > 12) {
+      Alert.alert("Telefone inválido", "Informe um telefone com DDD.");
+      return;
+    }
+
+    if (address.trim().length < 5 || address.trim().length > 200) {
+      Alert.alert(
+        "Endereço inválido",
+        "O endereço deve ter entre 5 e 200 caracteres.",
+      );
+      return;
+    }
+
+    if (password.length < 6 || password.length > 60) {
+      Alert.alert(
+        "Senha inválida",
+        "A senha deve ter entre 6 e 60 caracteres.",
+      );
+      return;
+    }
+
+    const data: RegisterRequest = {
+      accountType: "CITIZEN",
+      email: email.trim(),
+      password: password,
+      name: name.trim(),
+      phone: phoneNumbers,
+      address: address.trim(),
+      cpf: cpfNumbers,
+      cnpj: null,
+      neighborhood: null,
+      
+    };
+
+    try {
+      await registerMutation.mutateAsync(data);
+
+      Alert.alert(
+        "Cadastro realizado!",
+        "Sua conta foi criada com sucesso. Agora você já pode entrar.",
+        [
+          {
+            text: "Ir para login",
+            onPress: () => {
+              router.replace("/AuthScreen/LoginPersonScreen");
+            },
+          },
+        ],
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Não foi possível realizar o cadastro. Tente novamente.";
+
+      Alert.alert("Erro no cadastro", message);
+    }
   }
 
   return (
@@ -125,6 +197,17 @@ export default function AuthPersonScreen() {
               maxLength={14}
             />
 
+            <Text style={styles.label}>Telefone</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="(11) 99999-9999"
+              placeholderTextColor="#A0AAA4"
+              value={formData.phone}
+              onChangeText={(value) => updateFormData("phone", value)}
+              keyboardType="phone-pad"
+              maxLength={15}
+            />
+
             <Text style={styles.label}>Endereço</Text>
             <TextInput
               style={[styles.input, styles.addressInput]}
@@ -180,25 +263,35 @@ export default function AuthPersonScreen() {
           {/* Register button */}
           <View style={styles.footer}>
             <TouchableOpacity
-              style={styles.button}
+              style={[
+                styles.button,
+                registerMutation.isPending && styles.buttonDisabled,
+              ]}
               onPress={handleRegister}
               activeOpacity={0.8}
+              disabled={registerMutation.isPending}
             >
-              <Text style={styles.buttonText}>Criar minha conta</Text>
+              <Text style={styles.buttonText}>
+                {registerMutation.isPending
+                  ? "Cadastrando..."
+                  : "Criar minha conta"}
+              </Text>
 
-              
-
-              <Text style={styles.buttonArrow}>→</Text>
+              {!registerMutation.isPending && (
+                <Text style={styles.buttonArrow}>→</Text>
+              )}
             </TouchableOpacity>
-            <View style={styles.loginContainer}>
-                <Text style={styles.loginText}>Já possui uma conta?</Text>
 
-                <TouchableOpacity
-                  onPress={() => router.push("/AuthScreen/LoginPersonScreen")}
-                >
-                  <Text style={styles.loginLink}> Entrar</Text>
-                </TouchableOpacity>
-              </View>
+            <View style={styles.loginContainer}>
+              <Text style={styles.loginText}>Já possui uma conta?</Text>
+
+              <TouchableOpacity
+                onPress={() => router.push("/AuthScreen/LoginPersonScreen")}
+              >
+                <Text style={styles.loginLink}> Entrar</Text>
+              </TouchableOpacity>
+            </View>
+
             <Text style={styles.footerText}>
               Ao se cadastrar, você estará dando o primeiro passo
               {"\n"}para transformar vidas.
@@ -210,8 +303,7 @@ export default function AuthPersonScreen() {
   );
 }
 
-// Mantenha aqui seu StyleSheet original.
-
+// StyleSheet original
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -336,6 +428,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  buttonDisabled: {
+    opacity: 0.6,
+  },
   buttonText: {
     color: "#FFFFFF",
     fontSize: 15,
@@ -352,20 +447,19 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 17,
   },
-
   loginContainer: {
-  flexDirection: "row",
-  justifyContent: "center",
-  alignItems: "center",
-  marginTop: 5,
-},
-loginText: {
-  color: "#718078",
-  fontSize: 13,
-},
-loginLink: {
-  color: "#16A36A",
-  fontSize: 13,
-  fontWeight: "700",
-},
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 5,
+  },
+  loginText: {
+    color: "#718078",
+    fontSize: 13,
+  },
+  loginLink: {
+    color: "#16A36A",
+    fontSize: 13,
+    fontWeight: "700",
+  },
 });

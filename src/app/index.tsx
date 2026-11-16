@@ -17,6 +17,9 @@ export default function Index() {
   function handleContinue() {
     if (!selectedType) return;
 
+    const accountType = 
+      selectedType === "usuario" ? "CITIZEN" : "COLLECTION_POINT";
+
     if(selectedType === "usuario"){
       router.push("/AuthScreen/AuthPersonScreen")
     } else{
