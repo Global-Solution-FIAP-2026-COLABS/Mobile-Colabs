@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import {
   View,
@@ -13,6 +12,9 @@ import {
   TextInput,
 } from "react-native";
 import { router } from "expo-router";
+import { useLogin } from "../../hooks/useAuth";
+
+
 
 type FormData = {
   email: string;
@@ -20,6 +22,9 @@ type FormData = {
 };
 
 export default function LoginPersonScreen() {
+
+  const loginMutation = useLogin();
+  
   const [formData, setFormData] = useState<FormData>({
     email: "",
     password: "",
@@ -32,18 +37,34 @@ export default function LoginPersonScreen() {
     }));
   }
 
-  function handleLogin() {
+  async function handleLogin() {
     const { email, password } = formData;
 
-    if (!email || !password) {
+    if (!email.trim() || !password) {
       Alert.alert("Atenção", "Preencha seu e-mail e senha.");
       return;
     }
 
-    Alert.alert(
-      "Login",
-      "Dados preenchidos! Agora podemos integrar a autenticação com a API."
-    );
+    try {
+      await loginMutation.mutateAsync({
+        email: email.trim(),
+        password,
+      });
+
+      Alert.alert("Login realizado!", "Bem-vindo ao Conecta+.", [
+        {
+          text: "Continuar",
+          onPress: () => router.replace("/UserScreens/HomeUserScreen"),
+        },
+      ]);
+    } catch (error) {
+      Alert.alert(
+        "Erro no login",
+        error instanceof Error
+          ? error.message
+          : "Não foi possível realizar o login. Verifique suas credenciais.",
+      );
+    }
   }
 
   return (
@@ -91,9 +112,7 @@ export default function LoginPersonScreen() {
               placeholder="seuemail@exemplo.com"
               placeholderTextColor="#A0AAA4"
               value={formData.email}
-              onChangeText={(value) =>
-                updateFormData("email", value)
-              }
+              onChangeText={(value) => updateFormData("email", value)}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -105,9 +124,7 @@ export default function LoginPersonScreen() {
               placeholder="Digite sua senha"
               placeholderTextColor="#A0AAA4"
               value={formData.password}
-              onChangeText={(value) =>
-                updateFormData("password", value)
-              }
+              onChangeText={(value) => updateFormData("password", value)}
               secureTextEntry
             />
           </View>
@@ -115,20 +132,30 @@ export default function LoginPersonScreen() {
           {/* Login button */}
           <View style={styles.footer}>
             <TouchableOpacity
-              style={styles.button}
-              onPress={() => router.push("/UserScreens/HomeUserScreen")}
+              style={[
+                styles.button,
+                loginMutation.isPending && { opacity: 0.7 },
+              ]}
+              onPress={handleLogin}
+              disabled={loginMutation.isPending}
               activeOpacity={0.8}
             >
-              <Text style={styles.buttonText}>Entrar</Text>
-              <Text style={styles.buttonArrow}>→</Text>
+              {loginMutation.isPending ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Text style={styles.buttonText}>Entrar</Text>
+                  <Text style={styles.buttonArrow}>→</Text>
+                </>
+              )}
             </TouchableOpacity>
 
             <View style={styles.registerContainer}>
-              <Text style={styles.registerText}>
-                Ainda não possui conta?
-              </Text>
+              <Text style={styles.registerText}>Ainda não possui conta?</Text>
 
-              <TouchableOpacity onPress={() => router.push("/AuthScreen/LoginPersonScreen")}>
+              <TouchableOpacity
+                onPress={() => router.push("/AuthScreen/AuthPersonScreen")}
+              >
                 <Text style={styles.registerLink}> Cadastre-se</Text>
               </TouchableOpacity>
             </View>

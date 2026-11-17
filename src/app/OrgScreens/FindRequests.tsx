@@ -1,3 +1,4 @@
+
 import { useMemo, useState } from "react";
 import {
   View,
@@ -6,26 +7,18 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 
-type RequestItem = {
-  name: string;
-  quantity: number;
-};
+import {
+  useCommunityDonations,
+  useFulfillDonation,
+} from "../../hooks/useDonation";
 
-type HelpRequest = {
-  id: number;
-  user: string;
-  category: string;
-  institution: string;
-  distance: number;
-  description: string;
-  date: string;
-  status: string;
-  items: RequestItem[];
-};
+import type { DonationResponse } from "../../types/donationTypes";
 
 const categories = [
   "Todas",
@@ -37,132 +30,181 @@ const categories = [
   "Outros",
 ];
 
-// Dados temporários para desenvolvimento da interface
-const mockRequests: HelpRequest[] = [
-  {
-    id: 1,
-    user: "Maria Oliveira",
-    category: "Alimentos",
-    institution: "Instituição Esperança",
-    distance: 1.2,
-    description: "Preciso de alimentos básicos para minha família.",
-    date: "14/11/2026",
-    status: "Disponível",
-    items: [
-      { name: "Arroz", quantity: 2 },
-      { name: "Feijão", quantity: 2 },
-      { name: "Óleo", quantity: 1 },
-    ],
-  },
-  {
-    id: 2,
-    user: "João Santos",
-    category: "Higiene",
-    institution: "Centro Solidário",
-    distance: 3.5,
-    description: "Necessito de produtos de higiene pessoal.",
-    date: "13/11/2026",
-    status: "Disponível",
-    items: [
-      { name: "Sabonete", quantity: 4 },
-      { name: "Creme dental", quantity: 2 },
-      { name: "Shampoo", quantity: 1 },
-    ],
-  },
-  {
-    id: 3,
-    user: "Ana Costa",
-    category: "Roupas",
-    institution: "Instituto Vida Nova",
-    distance: 7.8,
-    description: "Estou precisando de roupas para meus filhos.",
-    date: "12/11/2026",
-    status: "Disponível",
-    items: [
-      { name: "Camiseta", quantity: 3 },
-      { name: "Calça", quantity: 2 },
-    ],
-  },
-  {
-    id: 4,
-    user: "Pedro Lima",
-    category: "Alimentos",
-    institution: "Instituição Esperança",
-    distance: 2.0,
-    description: "Pedido de uma cesta básica.",
-    date: "11/11/2026",
-    status: "Disponível",
-    items: [
-      { name: "Arroz", quantity: 1 },
-      { name: "Feijão", quantity: 1 },
-      { name: "Macarrão", quantity: 3 },
-    ],
-  },
-];
+const categoryLabels: Record<string, string> = {
+  FOOD: "Alimentos",
+  CLOTHING: "Roupas",
+  HYGIENE: "Higiene",
+  MEDICINE: "Medicamentos",
+  FURNITURE: "Móveis",
+  OTHER: "Outros",
+};
+
+function formatDate(date: string) {
+  if (!date) return "Data não informada";
+
+  const parsedDate = new Date(date);
+
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "Data não informada";
+  }
+
+  return parsedDate.toLocaleDateString("pt-BR");
+}
+
+function getRequestCategories(request: DonationResponse) {
+  const labels = (request.items ?? []).map(
+    (item) =>
+      item.categoryLabel ||
+      categoryLabels[item.category] ||
+      "Outros",
+  );
+
+  return [...new Set(labels)];
+}
 
 export default function FindRequestsScreen() {
   const [searchText, setSearchText] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Todas");
-  const [maxDistance, setMaxDistance] = useState(10);
   const [selectedInstitution, setSelectedInstitution] = useState("Todas");
   const [itemType, setItemType] = useState("");
-  const [expandedRequest, setExpandedRequest] = useState<number | null>(null);
 
-  const institutionOptions = [
-    "Todas",
-    ...Array.from(new Set(mockRequests.map((request) => request.institution))),
-  ];
+  const {
+    data,
+    isLoading,
+    isError,
+    error,
+    refetch,
+    isRefetching,
+  } = useCommunityDonations();
 
+  const fulfillMutation = useFulfillDonation();
+
+  const requests = data?.content ?? [];
+
+  // Instituições disponíveis
+  const institutionOptions = useMemo(() => {
+    const institutions = requests
+      .map(
+        (request) =>
+          request.collectionPointName || "Sem ponto de coleta",
+      )
+      .filter((institution) => institution.trim().length > 0);
+
+    return ["Todas", ...Array.from(new Set(institutions))];
+  }, [requests]);
+
+  // Filtros
   const filteredRequests = useMemo(() => {
-    return mockRequests.filter((request) => {
+    return requests.filter((request) => {
+      const requestCategories = getRequestCategories(request);
+      const search = searchText.toLowerCase().trim();
+
       const matchesSearch =
-        request.user.toLowerCase().includes(searchText.toLowerCase()) ||
-        request.description.toLowerCase().includes(searchText.toLowerCase()) ||
+        request.citizenName.toLowerCase().includes(search) ||
+        request.title.toLowerCase().includes(search) ||
+        request.description.toLowerCase().includes(search) ||
         request.items.some((item) =>
-          item.name.toLowerCase().includes(searchText.toLowerCase()),
+          item.name.toLowerCase().includes(search),
         );
 
       const matchesCategory =
-        selectedCategory === "Todas" || request.category === selectedCategory;
+        selectedCategory === "Todas" ||
+        requestCategories.includes(selectedCategory);
 
-      const matchesDistance = request.distance <= maxDistance;
+      const institution =
+        request.collectionPointName || "Sem ponto de coleta";
 
       const matchesInstitution =
         selectedInstitution === "Todas" ||
-        request.institution === selectedInstitution;
+        institution === selectedInstitution;
 
       const matchesItem =
         !itemType.trim() ||
         request.items.some((item) =>
-          item.name.toLowerCase().includes(itemType.toLowerCase().trim()),
+          item.name
+            .toLowerCase()
+            .includes(itemType.toLowerCase().trim()),
         );
 
       return (
+        request.type === "HELP_REQUEST" &&
+        request.status === "PENDING" &&
         matchesSearch &&
         matchesCategory &&
-        matchesDistance &&
         matchesInstitution &&
         matchesItem
       );
     });
   }, [
+    requests,
     searchText,
     selectedCategory,
-    maxDistance,
     selectedInstitution,
     itemType,
   ]);
 
-  function toggleDetails(requestId: number) {
-    setExpandedRequest((current) => (current === requestId ? null : requestId));
-  }
-
   function clearFilters() {
     setSearchText("");
     setSelectedCategory("Todas");
-    setMaxDistance(10);
     setSelectedInstitution("Todas");
     setItemType("");
+  }
+
+  // Assumir pedido
+  async function handleFulfill(request: DonationResponse) {
+    Alert.alert(
+      "Assumir pedido",
+      `Deseja assumir o pedido "${request.title}"?`,
+      [
+        {
+          text: "Cancelar",
+          style: "cancel",
+        },
+        {
+          text: "Quero ajudar",
+          onPress: async () => {
+            try {
+              await fulfillMutation.mutateAsync(request.id);
+
+              Alert.alert(
+                "Pedido assumido!",
+                "Você agora está responsável por atender este pedido.",
+              );
+
+              await refetch();
+            } catch (err) {
+              const message =
+                err instanceof Error
+                  ? err.message
+                  : "Não foi possível assumir o pedido.";
+
+              Alert.alert(
+                "Não foi possível continuar",
+                message,
+              );
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  // Abrir detalhes
+  function openRequest(request: DonationResponse) {
+    router.push({
+      pathname: "/OrgScreens/ViewRequest",
+      params: {
+        id: String(request.id),
+        user: request.citizenName,
+        category: getRequestCategories(request).join(", "),
+        institution:
+          request.collectionPointName || "Sem ponto de coleta",
+        description: request.description,
+        date: formatDate(request.createdAt),
+        status: request.status,
+        items: JSON.stringify(request.items),
+      },
+    } as any);
   }
 
   return (
@@ -183,11 +225,18 @@ export default function FindRequestsScreen() {
               }
             }}
           >
-            <Ionicons name="arrow-back" size={22} color="#173D2E" />
+            <Ionicons
+              name="arrow-back"
+              size={22}
+              color="#173D2E"
+            />
           </TouchableOpacity>
 
           <View style={styles.headerText}>
-            <Text style={styles.title}>Encontrar pedidos</Text>
+            <Text style={styles.title}>
+              Encontrar pedidos
+            </Text>
+
             <Text style={styles.subtitle}>
               Encontre pessoas que precisam de ajuda.
             </Text>
@@ -196,7 +245,11 @@ export default function FindRequestsScreen() {
 
         {/* Pesquisa */}
         <View style={styles.searchContainer}>
-          <Ionicons name="search-outline" size={20} color="#89958D" />
+          <Ionicons
+            name="search-outline"
+            size={20}
+            color="#89958D"
+          />
 
           <TextInput
             style={styles.searchInput}
@@ -210,17 +263,28 @@ export default function FindRequestsScreen() {
         {/* Filtros */}
         <View style={styles.filterHeader}>
           <View style={styles.filterTitleContainer}>
-            <Ionicons name="options-outline" size={19} color="#173D2E" />
-            <Text style={styles.sectionTitle}>Filtros</Text>
+            <Ionicons
+              name="options-outline"
+              size={19}
+              color="#173D2E"
+            />
+
+            <Text style={styles.sectionTitle}>
+              Filtros
+            </Text>
           </View>
 
           <TouchableOpacity onPress={clearFilters}>
-            <Text style={styles.clearText}>Limpar filtros</Text>
+            <Text style={styles.clearText}>
+              Limpar filtros
+            </Text>
           </TouchableOpacity>
         </View>
 
         {/* Categoria */}
-        <Text style={styles.filterLabel}>Categoria</Text>
+        <Text style={styles.filterLabel}>
+          Categoria
+        </Text>
 
         <ScrollView
           horizontal
@@ -253,41 +317,26 @@ export default function FindRequestsScreen() {
         </ScrollView>
 
         {/* Proximidade */}
-        <Text style={styles.filterLabel}>Proximidade</Text>
+        <Text style={styles.filterLabel}>
+          Proximidade
+        </Text>
 
-        <View style={styles.distanceContainer}>
-          {[2, 5, 10].map((distance) => {
-            const selected = maxDistance === distance;
+        <View style={styles.itemSearchContainer}>
+          <Ionicons
+            name="location-outline"
+            size={19}
+            color="#89958D"
+          />
 
-            return (
-              <TouchableOpacity
-                key={distance}
-                style={[
-                  styles.distanceButton,
-                  selected && styles.distanceButtonSelected,
-                ]}
-                onPress={() => setMaxDistance(distance)}
-              >
-                <Ionicons
-                  name="location-outline"
-                  size={15}
-                  color={selected ? "#FFFFFF" : "#16A36A"}
-                />
-                <Text
-                  style={[
-                    styles.distanceText,
-                    selected && styles.distanceTextSelected,
-                  ]}
-                >
-                  Até {distance} km
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+          <Text style={styles.unavailableText}>
+            Distância não disponível nos dados do pedido.
+          </Text>
         </View>
 
         {/* Instituição */}
-        <Text style={styles.filterLabel}>Instituição vinculada</Text>
+        <Text style={styles.filterLabel}>
+          Instituição vinculada
+        </Text>
 
         <ScrollView
           horizontal
@@ -295,7 +344,8 @@ export default function FindRequestsScreen() {
           contentContainerStyle={styles.categoryList}
         >
           {institutionOptions.map((institution) => {
-            const selected = selectedInstitution === institution;
+            const selected =
+              selectedInstitution === institution;
 
             return (
               <TouchableOpacity
@@ -304,7 +354,9 @@ export default function FindRequestsScreen() {
                   styles.categoryButton,
                   selected && styles.categoryButtonSelected,
                 ]}
-                onPress={() => setSelectedInstitution(institution)}
+                onPress={() =>
+                  setSelectedInstitution(institution)
+                }
               >
                 <Text
                   style={[
@@ -320,10 +372,16 @@ export default function FindRequestsScreen() {
         </ScrollView>
 
         {/* Tipo de item */}
-        <Text style={styles.filterLabel}>Tipo de item</Text>
+        <Text style={styles.filterLabel}>
+          Tipo de item
+        </Text>
 
         <View style={styles.itemSearchContainer}>
-          <Ionicons name="cube-outline" size={19} color="#89958D" />
+          <Ionicons
+            name="cube-outline"
+            size={19}
+            color="#89958D"
+          />
 
           <TextInput
             style={styles.searchInput}
@@ -337,82 +395,205 @@ export default function FindRequestsScreen() {
         {/* Resultados */}
         <View style={styles.resultsHeader}>
           <View>
-            <Text style={styles.sectionTitle}>Pedidos disponíveis</Text>
+            <Text style={styles.sectionTitle}>
+              Pedidos disponíveis
+            </Text>
+
             <Text style={styles.resultsSubtitle}>
               {filteredRequests.length} pedido(s) encontrado(s)
             </Text>
           </View>
 
-          <Ionicons name="list-outline" size={22} color="#16A36A" />
+          <Ionicons
+            name="list-outline"
+            size={22}
+            color="#16A36A"
+          />
         </View>
 
-        {filteredRequests.length === 0 ? (
+        {/* Carregamento */}
+        {isLoading ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="search-outline" size={38} color="#AAB5AE" />
-            <Text style={styles.emptyTitle}>Nenhum pedido encontrado</Text>
+            <ActivityIndicator
+              size="large"
+              color="#16A36A"
+            />
+
             <Text style={styles.emptyText}>
-              Tente alterar os filtros para encontrar outros pedidos.
+              Carregando pedidos comunitários...
+            </Text>
+          </View>
+        ) : isError ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons
+              name="alert-circle-outline"
+              size={38}
+              color="#C75B5B"
+            />
+
+            <Text style={styles.emptyTitle}>
+              Não foi possível carregar os pedidos
+            </Text>
+
+            <Text style={styles.emptyText}>
+              {error instanceof Error
+                ? error.message
+                : "Verifique sua conexão e tente novamente."}
+            </Text>
+
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => refetch()}
+            >
+              <Text style={styles.retryButtonText}>
+                Tentar novamente
+              </Text>
+            </TouchableOpacity>
+          </View>
+        ) : filteredRequests.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons
+              name="search-outline"
+              size={38}
+              color="#AAB5AE"
+            />
+
+            <Text style={styles.emptyTitle}>
+              Nenhum pedido encontrado
+            </Text>
+
+            <Text style={styles.emptyText}>
+              Tente alterar os filtros ou volte mais tarde
+              para conferir novos pedidos.
             </Text>
           </View>
         ) : (
-          filteredRequests.map((request) => (
-            <TouchableOpacity
-              key={request.id}
-              style={styles.requestCard}
-              activeOpacity={0.8}
-              onPress={() =>
-                router.push({
-                  pathname: "/OrgScreens/ViewRequest",
-                  params: {
-                    id: String(request.id),
-                    user: request.user,
-                    category: request.category,
-                    institution: request.institution,
-                    distance: String(request.distance),
-                    description: request.description,
-                    date: request.date,
-                    status: request.status,
-                    items: JSON.stringify(request.items),
-                  },
-                } as any)
-              }
-            >
-              <View style={styles.cardHeader}>
-                <View style={styles.categoryBadge}>
-                  <Text style={styles.categoryBadgeText}>
-                    {request.category}
+          filteredRequests.map((request) => {
+            const requestCategories =
+              getRequestCategories(request);
+
+            return (
+              <View
+                key={request.id}
+                style={styles.requestCard}
+              >
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={() => openRequest(request)}
+                >
+                  <View style={styles.cardHeader}>
+                    <View style={styles.categoryBadge}>
+                      <Text style={styles.categoryBadgeText}>
+                        {requestCategories.join(", ") || "Outros"}
+                      </Text>
+                    </View>
+
+                    <Text style={styles.statusText}>
+                      Disponível
+                    </Text>
+                  </View>
+
+                  <Text style={styles.userName}>
+                    {request.citizenName}
                   </Text>
-                </View>
 
-                <Text style={styles.distanceBadge}>
-                  <Ionicons name="location-outline" size={13} color="#16A36A" />{" "}
-                  {request.distance.toFixed(1)} km
-                </Text>
+                  <Text style={styles.requestDescription}>
+                    {request.title}
+                    {"\n"}
+                    {request.description}
+                  </Text>
+
+                  <View style={styles.cardInfo}>
+                    <Ionicons
+                      name="business-outline"
+                      size={16}
+                      color="#718078"
+                    />
+
+                    <Text style={styles.cardInfoText}>
+                      {request.collectionPointName ||
+                        "Sem ponto de coleta vinculado"}
+                    </Text>
+                  </View>
+
+                  <View style={styles.cardInfo}>
+                    <Ionicons
+                      name="calendar-outline"
+                      size={16}
+                      color="#718078"
+                    />
+
+                    <Text style={styles.cardInfoText}>
+                      {formatDate(request.createdAt)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.cardInfo}>
+                    <Ionicons
+                      name="cube-outline"
+                      size={16}
+                      color="#718078"
+                    />
+
+                    <Text style={styles.cardInfoText}>
+                      {request.items
+                        .map(
+                          (item) =>
+                            `${item.name} (${item.quantity})`,
+                        )
+                        .join(", ")}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailsButton}>
+                    <Text style={styles.detailsButtonText}>
+                      Visualizar pedido
+                    </Text>
+
+                    <Ionicons
+                      name="arrow-forward"
+                      size={18}
+                      color="#16A36A"
+                    />
+                  </View>
+                </TouchableOpacity>
+
+                {/* Assumir pedido */}
+                <TouchableOpacity
+                  style={[
+                    styles.fulfillButton,
+                    fulfillMutation.isPending &&
+                      styles.fulfillButtonDisabled,
+                  ]}
+                  disabled={fulfillMutation.isPending}
+                  onPress={() => handleFulfill(request)}
+                >
+                  {fulfillMutation.isPending ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name="hand-left-outline"
+                        size={17}
+                        color="#FFFFFF"
+                      />
+
+                      <Text style={styles.fulfillButtonText}>
+                        Quero ajudar
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               </View>
+            );
+          })
+        )}
 
-              <Text style={styles.userName}>{request.user}</Text>
-
-              <Text style={styles.requestDescription}>
-                {request.description}
-              </Text>
-
-              <View style={styles.cardInfo}>
-                <Ionicons name="business-outline" size={16} color="#718078" />
-                <Text style={styles.cardInfoText}>{request.institution}</Text>
-              </View>
-
-              <View style={styles.cardInfo}>
-                <Ionicons name="calendar-outline" size={16} color="#718078" />
-                <Text style={styles.cardInfoText}>{request.date}</Text>
-              </View>
-
-              <View style={styles.detailsButton}>
-                <Text style={styles.detailsButtonText}>Visualizar pedido</Text>
-
-                <Ionicons name="arrow-forward" size={18} color="#16A36A" />
-              </View>
-            </TouchableOpacity>
-          ))
+        {isRefetching && !isLoading && (
+          <ActivityIndicator
+            style={{ marginVertical: 12 }}
+            color="#16A36A"
+          />
         )}
       </ScrollView>
     </View>
@@ -422,278 +603,296 @@ export default function FindRequestsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8FAFC",
+    backgroundColor: "#F7F9F7",
   },
+
   scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 55,
+    padding: 20,
     paddingBottom: 35,
   },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
     marginBottom: 25,
+    gap: 14,
   },
+
   backButton: {
-    width: 43,
-    height: 43,
-    borderRadius: 13,
-    backgroundColor: "#E5F5EC",
-    justifyContent: "center",
+    width: 42,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: "#EAF2EC",
     alignItems: "center",
+    justifyContent: "center",
   },
+
   headerText: {
     flex: 1,
   },
+
   title: {
-    fontSize: 23,
+    fontSize: 22,
     fontWeight: "800",
     color: "#173D2E",
   },
+
   subtitle: {
     fontSize: 12,
-    color: "#718078",
+    color: "#89958D",
     marginTop: 4,
   },
+
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#DFE8E2",
-    borderRadius: 14,
+    borderRadius: 13,
     paddingHorizontal: 14,
-    height: 52,
-    gap: 10,
-    marginBottom: 25,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: "#E5EBE6",
   },
+
   searchInput: {
     flex: 1,
-    color: "#173D2E",
     fontSize: 13,
+    color: "#173D2E",
+    paddingVertical: 14,
+    paddingHorizontal: 10,
   },
+
   filterHeader: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 18,
   },
+
   filterTitleContainer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
+
   sectionTitle: {
-    color: "#173D2E",
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "800",
+    color: "#173D2E",
   },
+
   clearText: {
-    color: "#16A36A",
     fontSize: 12,
-    fontWeight: "600",
-  },
-  filterLabel: {
-    color: "#52645A",
-    fontSize: 13,
     fontWeight: "700",
+    color: "#16A36A",
+  },
+
+  filterLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#53645A",
     marginBottom: 10,
     marginTop: 12,
   },
+
   categoryList: {
+    flexDirection: "row",
     gap: 8,
     paddingBottom: 5,
   },
+
   categoryButton: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: "#DFE8E2",
+    paddingHorizontal: 15,
+    paddingVertical: 9,
+    borderRadius: 20,
     backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#E2EAE3",
   },
+
   categoryButtonSelected: {
-    backgroundColor: "#16A36A",
-    borderColor: "#16A36A",
+    backgroundColor: "#173D2E",
+    borderColor: "#173D2E",
   },
+
   categoryText: {
+    color: "#64736A",
     fontSize: 11,
     fontWeight: "600",
-    color: "#718078",
   },
+
   categoryTextSelected: {
     color: "#FFFFFF",
   },
-  distanceContainer: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  distanceButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    paddingVertical: 11,
-    borderRadius: 11,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#DFE8E2",
-  },
-  distanceButtonSelected: {
-    backgroundColor: "#16A36A",
-    borderColor: "#16A36A",
-  },
-  distanceText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#52645A",
-  },
-  distanceTextSelected: {
-    color: "#FFFFFF",
-  },
+
   itemSearchContainer: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#DFE8E2",
     borderRadius: 12,
     paddingHorizontal: 13,
-    height: 48,
-    gap: 9,
+    borderWidth: 1,
+    borderColor: "#E5EBE6",
+    marginBottom: 8,
   },
+
+  unavailableText: {
+    flex: 1,
+    color: "#89958D",
+    fontSize: 11,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+  },
+
   resultsHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 30,
-    marginBottom: 15,
+    marginTop: 28,
+    marginBottom: 16,
   },
+
   resultsSubtitle: {
     color: "#89958D",
     fontSize: 11,
     marginTop: 4,
   },
+
   requestCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 16,
-    marginBottom: 14,
+    marginBottom: 15,
     borderWidth: 1,
-    borderColor: "#E5EDE8",
+    borderColor: "#E8EEE9",
   },
+
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 13,
+    gap: 8,
   },
+
   categoryBadge: {
-    backgroundColor: "#E5F5EC",
-    borderRadius: 8,
-    paddingHorizontal: 10,
+    backgroundColor: "#E8F5ED",
+    paddingHorizontal: 11,
     paddingVertical: 6,
+    borderRadius: 20,
   },
+
   categoryBadgeText: {
-    color: "#16A36A",
+    color: "#168653",
     fontSize: 10,
     fontWeight: "700",
   },
-  distanceBadge: {
-    color: "#16A36A",
+
+  statusText: {
+    color: "#168653",
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "700",
   },
+
   userName: {
     color: "#173D2E",
     fontSize: 16,
-    fontWeight: "700",
+    fontWeight: "800",
     marginBottom: 7,
   },
+
   requestDescription: {
-    color: "#718078",
+    color: "#64736A",
     fontSize: 12,
     lineHeight: 19,
     marginBottom: 13,
   },
+
   cardInfo: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    marginBottom: 8,
+    gap: 8,
+    marginBottom: 9,
   },
+
   cardInfoText: {
+    flex: 1,
     color: "#718078",
     fontSize: 11,
-    flex: 1,
   },
+
   detailsButton: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    marginTop: 8,
     borderTopWidth: 1,
-    borderTopColor: "#EDF1EE",
-    marginTop: 7,
-    paddingTop: 13,
+    borderTopColor: "#EDF1ED",
   },
+
   detailsButtonText: {
     color: "#16A36A",
     fontSize: 12,
     fontWeight: "700",
   },
-  detailsContainer: {
-    backgroundColor: "#F8FAFC",
-    borderRadius: 12,
-    padding: 13,
-    marginTop: 12,
-  },
-  detailsTitle: {
-    color: "#173D2E",
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 10,
-    marginTop: 5,
-  },
-  itemRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    paddingVertical: 7,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E5EDE8",
-  },
-  itemName: {
-    color: "#52645A",
-    fontSize: 12,
-  },
-  itemQuantity: {
-    color: "#718078",
-    fontSize: 11,
-  },
-  statusText: {
-    color: "#16A36A",
-    fontSize: 12,
-    fontWeight: "600",
-  },
+
   emptyContainer: {
     alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 30,
-    marginTop: 5,
+    justifyContent: "center",
+    paddingVertical: 35,
+    paddingHorizontal: 20,
   },
+
   emptyTitle: {
     color: "#173D2E",
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "800",
+    textAlign: "center",
     marginTop: 12,
   },
+
   emptyText: {
     color: "#89958D",
     fontSize: 12,
     textAlign: "center",
-    marginTop: 7,
-    lineHeight: 18,
+    lineHeight: 19,
+    marginTop: 8,
+  },
+
+  retryButton: {
+    backgroundColor: "#16A36A",
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    borderRadius: 10,
+    marginTop: 15,
+  },
+
+  retryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  fulfillButton: {
+    backgroundColor: "#16A36A",
+    borderRadius: 11,
+    paddingVertical: 13,
+    marginTop: 14,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+
+  fulfillButtonDisabled: {
+    opacity: 0.6,
+  },
+
+  fulfillButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
   },
 });

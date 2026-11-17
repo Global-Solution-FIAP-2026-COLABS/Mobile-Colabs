@@ -216,7 +216,7 @@ export default function HomeScreen() {
   }
 
   function handleDonate() {
-    Alert.alert("Fazer doação", "A tela de doação será implementada.");
+     router.push("/OrgScreens/FindRequests");
   }
 
   function handleRequestHelp() {

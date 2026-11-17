@@ -1,5 +1,8 @@
-
-import { apiFetch, saveToken } from "../api/api";
+import {
+  apiFetch,
+  saveToken,
+  saveCitizenId,
+} from "../api/api";
 
 import type {
   RegisterRequest,
@@ -26,6 +29,10 @@ export async function login(
   });
 
   await saveToken(response.token);
+
+  if (response.citizenId !== null) {
+    await saveCitizenId(response.citizenId);
+  }
 
   return response;
 }

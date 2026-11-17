@@ -4,6 +4,8 @@ const API_URL = "https://colabs-java.onrender.com";
 
 const TOKEN_KEY = "@colabs:token";
 
+const CITIZEN_ID_KEY = "@colabs:citizenId";
+
 export class ApiError extends Error {
   status: number;
 
@@ -24,6 +26,15 @@ export async function getToken() {
 
 export async function removeToken() {
   await AsyncStorage.removeItem(TOKEN_KEY);
+}
+
+export async function saveCitizenId(id: number) {
+  await AsyncStorage.setItem(CITIZEN_ID_KEY, String(id));
+}
+
+export async function getCitizenId(): Promise<number | null> {
+  const id = await AsyncStorage.getItem(CITIZEN_ID_KEY);
+  return id ? Number(id) : null;
 }
 
 export async function apiFetch<T>(

@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import {
   View,
@@ -10,65 +9,80 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { useCollectionPoints } from "../../hooks/useCollectionPoints";
+
+import { useCreateDonation } from "../../hooks/useDonation";
+import { getCitizenId, ApiError } from "../../api/api";
+
+import type { DonationCategory } from "../../types/donationTypes";
 
 type HelpItem = {
   id: number;
   name: string;
   quantity: string;
+  category: DonationCategory | "";
 };
 
 type FormData = {
-  category: string;
-  institutionId: string;
+  title: string;
+  institutionId: number | null;
   description: string;
 };
 
 const categories = [
-  "Alimentos",
-  "Roupas",
-  "Higiene",
-  "Medicamentos",
-  "Móveis",
-  "Outros",
-];
-
-// Dados temporários. Posteriormente serão carregados pela API.
-const institutions = [
-  { id: "1", name: "Instituição Esperança", distance: "1,2 km" },
-  { id: "2", name: "Centro Solidário", distance: "2,5 km" },
-  { id: "3", name: "Instituto Vida Nova", distance: "3,8 km" },
+  { label: "Alimentos", value: "FOOD" },
+  { label: "Roupas", value: "CLOTHING" },
+  { label: "Higiene", value: "HYGIENE" },
+  { label: "Medicamentos", value: "MEDICINE" },
+  { label: "Móveis", value: "FURNITURE" },
+  { label: "Outros", value: "OTHER" },
 ];
 
 export default function RequestHelpScreen() {
+  const createDonation = useCreateDonation();
+
+  const { data, isLoading, isError, refetch } = useCollectionPoints();
+
+  const institutions = data?.content ?? [];
+  const activeInstitutions = institutions.filter(
+    (institution) => institution.active,
+  );
+
   const [formData, setFormData] = useState<FormData>({
-    category: "",
-    institutionId: "",
+    title: "",
+    institutionId: null,
     description: "",
   });
 
   const [items, setItems] = useState<HelpItem[]>([
-    { id: 1, name: "", quantity: "1" },
+    { id: 1, name: "", quantity: "1", category: "" },
   ]);
 
-  function updateFormData(field: keyof FormData, value: string) {
+  function updateFormData(
+    field: keyof FormData,
+    value: string | number | null,
+  ) {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
     }));
   }
 
+  function handleInstitutionSelection(id: number) {
+    updateFormData("institutionId", id);
+  }
+
   function updateItem(
     id: number,
     field: keyof Omit<HelpItem, "id">,
-    value: string
+    value: string,
   ) {
     setItems((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item
-      )
+      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
     );
   }
 
@@ -79,78 +93,114 @@ export default function RequestHelpScreen() {
         id: Date.now(),
         name: "",
         quantity: "1",
+        category: "",
       },
     ]);
   }
 
   function removeItem(id: number) {
     if (items.length === 1) {
-      Alert.alert("Atenção", "Adicione pelo menos um item ao pedido.");
+      Alert.alert("Atenção", "O pedido precisa ter pelo menos um item.");
       return;
     }
 
     setItems((prev) => prev.filter((item) => item.id !== id));
   }
 
-  function handleSubmit() {
-    if (!formData.category) {
-      Alert.alert("Atenção", "Selecione uma categoria.");
+  async function handleSubmit() {
+    if (formData.title.trim().length < 3) {
+      Alert.alert("Atenção", "O título deve ter pelo menos 3 caracteres.");
       return;
     }
 
-    if (!formData.institutionId) {
+    if (formData.institutionId === null) {
       Alert.alert("Atenção", "Selecione uma instituição.");
       return;
     }
 
-    if (!formData.description.trim()) {
-      Alert.alert("Atenção", "Descreva sua necessidade.");
+    if (
+      formData.description.trim().length < 10 ||
+      formData.description.trim().length > 500
+    ) {
+      Alert.alert("Atenção", "A descrição deve ter entre 10 e 500 caracteres.");
       return;
     }
 
     const invalidItem = items.some(
       (item) =>
-        !item.name.trim() ||
-        !item.quantity ||
+        item.name.trim().length < 2 ||
+        item.name.trim().length > 120 ||
         !Number.isInteger(Number(item.quantity)) ||
-        Number(item.quantity) <= 0
+        Number(item.quantity) <= 0 ||
+        !item.category,
     );
 
     if (invalidItem) {
       Alert.alert(
         "Atenção",
-        "Preencha todos os itens com uma quantidade válida."
+        "Preencha todos os itens com nome, quantidade e categoria válidos.",
       );
       return;
     }
 
-    const selectedInstitution = institutions.find(
-      (institution) => institution.id === formData.institutionId
+    const selectedInstitution = activeInstitutions.find(
+      (institution) => institution.id === formData.institutionId,
     );
 
-    const requestData = {
-      category: formData.category,
-      institutionId: formData.institutionId,
-      description: formData.description.trim(),
-      items: items.map((item) => ({
-        name: item.name.trim(),
-        quantity: Number(item.quantity),
-      })),
-    };
+    if (!selectedInstitution) {
+      Alert.alert(
+        "Atenção",
+        "A instituição selecionada não está mais disponível.",
+      );
+      return;
+    }
 
-    // Temporário: futuramente enviar requestData para a API.
-    console.log("Pedido de ajuda:", requestData);
+    try {
+      const citizenId = await getCitizenId();
 
-    Alert.alert(
-      "Pedido preenchido!",
-      `Seu pedido para ${selectedInstitution?.name} foi validado. A integração com a API será feita posteriormente.`,
-      [
-        {
-          text: "OK",
-          onPress: () => router.back(),
-        },
-      ]
-    );
+      if (citizenId === null || !Number.isInteger(citizenId)) {
+        Alert.alert(
+          "Sessão inválida",
+          "Não foi possível identificar seu cadastro. Entre novamente.",
+        );
+        return;
+      }
+
+      const requestData = {
+        type: "HELP_REQUEST" as const,
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        citizenId,
+        collectionPointId: formData.institutionId,
+        items: items.map((item) => ({
+          name: item.name.trim(),
+          quantity: Number(item.quantity),
+          category: item.category as DonationCategory,
+        })),
+      };
+
+      const response = await createDonation.mutateAsync(requestData);
+
+      Alert.alert(
+        "Pedido enviado!",
+        `Seu pedido "${response.title}" foi cadastrado com sucesso.`,
+        [
+          {
+            text: "OK",
+            onPress: () => router.back(),
+          },
+        ],
+      );
+    } catch (error) {
+      console.log("Erro ao cadastrar pedido:", error);
+
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : "Não foi possível enviar seu pedido. Tente novamente.";
+
+      Alert.alert("Erro ao enviar pedido", message);
+    }
   }
 
   return (
@@ -193,50 +243,34 @@ export default function RequestHelpScreen() {
           </View>
 
           <Text style={styles.infoText}>
-            Preencha as informações abaixo para que uma instituição
-            possa conhecer sua necessidade.
+            Preencha as informações abaixo para que uma instituição possa
+            conhecer sua necessidade.
           </Text>
         </View>
 
-        {/* Categoria */}
+        {/* Título */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            Categoria do pedido <Text style={styles.required}>*</Text>
+            Título do pedido <Text style={styles.required}>*</Text>
           </Text>
 
           <Text style={styles.helperText}>
-            Selecione o tipo de ajuda que você precisa.
+            Resuma o que você está precisando.
           </Text>
 
-          <View style={styles.categoryContainer}>
-            {categories.map((category) => {
-              const selected = formData.category === category;
+          <TextInput
+            style={styles.input}
+            placeholder="Ex: Apoio alimentar para minha família"
+            placeholderTextColor="#9CA9A1"
+            value={formData.title}
+            onChangeText={(value) => updateFormData("title", value)}
+            maxLength={120}
+          />
 
-              return (
-                <TouchableOpacity
-                  key={category}
-                  style={[
-                    styles.categoryButton,
-                    selected && styles.categorySelected,
-                  ]}
-                  onPress={() => updateFormData("category", category)}
-                  activeOpacity={0.8}
-                >
-                  <Text
-                    style={[
-                      styles.categoryText,
-                      selected && styles.categoryTextSelected,
-                    ]}
-                  >
-                    {category}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+          <Text style={styles.characterCount}>{formData.title.length}/120</Text>
         </View>
 
-        {/* Instituição */}
+        {/* Instituições */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
             Instituição desejada <Text style={styles.required}>*</Text>
@@ -246,59 +280,65 @@ export default function RequestHelpScreen() {
             Escolha a instituição para a qual deseja enviar seu pedido.
           </Text>
 
-          {institutions.map((institution) => {
-            const selected =
-              formData.institutionId === institution.id;
+          {isLoading ? (
+            <ActivityIndicator size="large" color="#16A36A" />
+          ) : isError ? (
+            <TouchableOpacity onPress={() => refetch()}>
+              <Text style={styles.helperText}>
+                Erro ao carregar instituições. Toque para tentar novamente.
+              </Text>
+            </TouchableOpacity>
+          ) : activeInstitutions.length === 0 ? (
+            <Text style={styles.helperText}>
+              Nenhuma instituição disponível no momento.
+            </Text>
+          ) : (
+            activeInstitutions.map((institution) => {
+              const selected = formData.institutionId === institution.id;
 
-            return (
-              <TouchableOpacity
-                key={institution.id}
-                style={[
-                  styles.institutionCard,
-                  selected && styles.institutionSelected,
-                ]}
-                onPress={() =>
-                  updateFormData("institutionId", institution.id)
-                }
-                activeOpacity={0.8}
-              >
-                <View style={styles.institutionIcon}>
+              return (
+                <TouchableOpacity
+                  key={institution.id}
+                  style={[
+                    styles.institutionCard,
+                    selected && styles.institutionSelected,
+                  ]}
+                  onPress={() => handleInstitutionSelection(institution.id)}
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.institutionIcon}>
+                    <Ionicons
+                      name="business-outline"
+                      size={22}
+                      color="#16A36A"
+                    />
+                  </View>
+
+                  <View style={styles.institutionInfo}>
+                    <Text style={styles.institutionName}>
+                      {institution.name}
+                    </Text>
+
+                    <Text style={styles.institutionDistance}>
+                      {institution.neighborhood || institution.address}
+                    </Text>
+                  </View>
+
                   <Ionicons
-                    name="business-outline"
+                    name={selected ? "radio-button-on" : "radio-button-off"}
                     size={22}
-                    color="#16A36A"
+                    color={selected ? "#16A36A" : "#AAB5AE"}
                   />
-                </View>
-                
-                <View style={styles.institutionInfo}>
-                  <Text style={styles.institutionName}>
-                    {institution.name}
-                  </Text>
-                  <Text style={styles.institutionDistance}>
-                    <Ionicons name="location-outline" size={12} />
-                    {" "}{institution.distance} de distância
-                  </Text>
-                </View>
-
-                <Ionicons
-                  name={
-                    selected
-                      ? "radio-button-on"
-                      : "radio-button-off"
-                  }
-                  size={22}
-                  color={selected ? "#16A36A" : "#AAB5AE"}
-                />
-              </TouchableOpacity>
-            );
-          })}
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
 
         {/* Descrição */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            Descrição da necessidade{" "}
-            <Text style={styles.required}>*</Text>
+            Descrição da necessidade <Text style={styles.required}>*</Text>
           </Text>
 
           <Text style={styles.helperText}>
@@ -313,9 +353,7 @@ export default function RequestHelpScreen() {
             numberOfLines={5}
             textAlignVertical="top"
             value={formData.description}
-            onChangeText={(value) =>
-              updateFormData("description", value)
-            }
+            onChangeText={(value) => updateFormData("description", value)}
             maxLength={500}
           />
 
@@ -327,57 +365,47 @@ export default function RequestHelpScreen() {
         {/* Itens necessários */}
         <View style={styles.section}>
           <View style={styles.itemHeader}>
-            <View>
+            <View style={styles.itemHeaderText}>
               <Text style={styles.sectionTitle}>
-                Itens necessários{" "}
-                <Text style={styles.required}>*</Text>
+                Itens necessários <Text style={styles.required}>*</Text>
               </Text>
 
               <Text style={styles.helperText}>
-                Informe os itens e suas respectivas quantidades.
+                Informe o nome, a quantidade e a categoria de cada item.
               </Text>
             </View>
 
             <View style={styles.itemCount}>
-              <Text style={styles.itemCountText}>
-                {items.length}
-              </Text>
+              <Text style={styles.itemCountText}>{items.length}</Text>
             </View>
           </View>
 
           {items.map((item, index) => (
             <View key={item.id} style={styles.itemCard}>
               <View style={styles.itemCardHeader}>
-                <Text style={styles.itemNumber}>
-                  ITEM {index + 1}
-                </Text>
+                <Text style={styles.itemNumber}>ITEM {index + 1}</Text>
 
                 <TouchableOpacity
                   onPress={() => removeItem(item.id)}
                   style={styles.removeButton}
                 >
-                  <Ionicons
-                    name="trash-outline"
-                    size={18}
-                    color="#DC5555"
-                  />
+                  <Ionicons name="trash-outline" size={18} color="#DC5555" />
                   <Text style={styles.removeText}>Remover</Text>
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.inputLabel}>Nome do item</Text>
+              <Text style={styles.inputLabel}>Nome do item *</Text>
 
               <TextInput
                 style={styles.input}
-                placeholder="Ex: Cesta básica"
+                placeholder="Ex: Arroz 5kg"
                 placeholderTextColor="#9CA9A1"
                 value={item.name}
-                onChangeText={(value) =>
-                  updateItem(item.id, "name", value)
-                }
+                onChangeText={(value) => updateItem(item.id, "name", value)}
+                maxLength={120}
               />
 
-              <Text style={styles.inputLabel}>Quantidade</Text>
+              <Text style={styles.inputLabel}>Quantidade *</Text>
 
               <TextInput
                 style={styles.input}
@@ -386,13 +414,40 @@ export default function RequestHelpScreen() {
                 keyboardType="number-pad"
                 value={item.quantity}
                 onChangeText={(value) =>
-                  updateItem(
-                    item.id,
-                    "quantity",
-                    value.replace(/\D/g, "")
-                  )
+                  updateItem(item.id, "quantity", value.replace(/\D/g, ""))
                 }
               />
+
+              <Text style={styles.inputLabel}>Categoria do item *</Text>
+
+              <View style={styles.categoryContainer}>
+                {categories.map((category) => {
+                  const selected = item.category === category.value;
+
+                  return (
+                    <TouchableOpacity
+                      key={category.value}
+                      style={[
+                        styles.categoryButton,
+                        selected && styles.categorySelected,
+                      ]}
+                      onPress={() =>
+                        updateItem(item.id, "category", category.value)
+                      }
+                      activeOpacity={0.8}
+                    >
+                      <Text
+                        style={[
+                          styles.categoryText,
+                          selected && styles.categoryTextSelected,
+                        ]}
+                      >
+                        {category.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
             </View>
           ))}
 
@@ -406,16 +461,26 @@ export default function RequestHelpScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Botão de envio */}
+        {/* Envio */}
         <TouchableOpacity
-          style={styles.submitButton}
+          style={[
+            styles.submitButton,
+            createDonation.isPending && { opacity: 0.7 },
+          ]}
           onPress={handleSubmit}
+          disabled={createDonation.isPending}
           activeOpacity={0.85}
         >
-          <Ionicons name="send-outline" size={19} color="#FFFFFF" />
-          <Text style={styles.submitButtonText}>
-            Enviar pedido de ajuda
-          </Text>
+          {createDonation.isPending ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <>
+              <Ionicons name="send-outline" size={19} color="#FFFFFF" />
+              <Text style={styles.submitButtonText}>
+                Enviar pedido de ajuda
+              </Text>
+            </>
+          )}
         </TouchableOpacity>
 
         <Text style={styles.footerText}>
@@ -508,6 +573,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 9,
+    marginBottom: 8,
   },
   categoryButton: {
     paddingHorizontal: 16,
@@ -586,6 +652,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+  itemHeaderText: {
+    flex: 1,
+  },
   itemCount: {
     width: 30,
     height: 30,
@@ -593,6 +662,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#E5F5EC",
     alignItems: "center",
     justifyContent: "center",
+    marginLeft: 10,
   },
   itemCountText: {
     color: "#16A36A",

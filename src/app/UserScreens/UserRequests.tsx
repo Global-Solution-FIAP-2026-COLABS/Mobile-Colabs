@@ -8,8 +8,9 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-
-type RequestStatus = "Pendente" | "Em atendimento" | "Concluído";
+import { useMyDonations } from "../../hooks/useDonation";
+import type { ComponentProps } from "react";
+type IoniconName = ComponentProps<typeof Ionicons>["name"];
 
 type HelpRequest = {
   id: number;
@@ -24,85 +25,120 @@ type HelpRequest = {
   }[];
 };
 
-const requests: HelpRequest[] = [
-  {
-    id: 1,
-    category: "Alimentos",
-    institution: "Instituição Esperança",
-    description:
-      "Necessidade de alimentos básicos para auxiliar minha família.",
-    date: "10/11/2026",
-    status: "Pendente",
-    items: [
-      { name: "Arroz", quantity: 2 },
-      { name: "Feijão", quantity: 2 },
-      { name: "Óleo", quantity: 1 },
-    ],
-  },
-  {
-    id: 2,
-    category: "Higiene",
-    institution: "Centro Solidário",
-    description: "Preciso de produtos de higiene pessoal.",
-    date: "08/11/2026",
-    status: "Em atendimento",
-    items: [
-      { name: "Sabonete", quantity: 4 },
-      { name: "Creme dental", quantity: 2 },
-      { name: "Shampoo", quantity: 1 },
-    ],
-  },
-  {
-    id: 3,
-    category: "Roupas",
-    institution: "Instituto Vida Nova",
-    description: "Solicitação de roupas para uso pessoal.",
-    date: "02/11/2026",
-    status: "Concluído",
-    items: [
-      { name: "Camiseta", quantity: 3 },
-      { name: "Calça", quantity: 2 },
-    ],
-  },
-];
-
 const filters = ["Todos", "Pendente", "Em atendimento", "Concluído"];
 
 type Filter = (typeof filters)[number];
 
+import type { DonationStatus } from "../../types/donationTypes";
+
+type RequestStatus =
+  | "Pendente"
+  | "Em atendimento"
+  | "Aprovado"
+  | "Recusado"
+  | "Concluído"
+  | "Cancelado";
+
+function mapDonationStatus(status: DonationStatus): RequestStatus {
+  const statusMap: Record<DonationStatus, RequestStatus> = {
+    PENDING: "Pendente",
+    IN_PROGRESS: "Em atendimento",
+    APPROVED: "Aprovado",
+    REJECTED: "Recusado",
+    DELIVERED: "Concluído",
+    CANCELLED: "Cancelado",
+  };
+
+  return statusMap[status];
+}
+
 export default function MyRequestsScreen() {
+  const { data, isLoading, isError, refetch } = useMyDonations();
+
   const [selectedFilter, setSelectedFilter] = useState<Filter>("Todos");
   const [expandedRequest, setExpandedRequest] = useState<number | null>(null);
+
+  const requests = (data?.content ?? [])
+    .filter((donation) => donation.type === "HELP_REQUEST")
+    .map((donation) => ({
+      id: donation.id,
+      category: [
+        ...new Set(donation.items.map((item) => item.categoryLabel)),
+      ].join(", "),
+      institution: donation.collectionPointName ?? "Instituição não informada",
+      description: donation.description,
+      date: new Date(donation.createdAt).toLocaleDateString("pt-BR"),
+      status: mapDonationStatus(donation.status),
+      items: donation.items.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+      })),
+    }));
 
   const filteredRequests =
     selectedFilter === "Todos"
       ? requests
       : requests.filter((request) => request.status === selectedFilter);
 
-  function getStatusColor(status: RequestStatus) {
+  const getStatusColor = (status: RequestStatus) => {
     switch (status) {
       case "Pendente":
         return {
-          background: "#FFF4DF",
-          text: "#B7791F",
-          icon: "time-outline" as const,
+          background: "#FFF3CD",
+          icon: "#856404",
+          text: "#856404",
+          iconName: "time-outline" as const,
         };
 
       case "Em atendimento":
         return {
-          background: "#E8F1FF",
-          text: "#3478C7",
-          icon: "sync-outline" as const,
+          background: "#D1ECF1",
+          icon: "#0C5460",
+          text: "#0C5460",
+          iconName: "sync-outline" as const,
+        };
+
+      case "Aprovado":
+        return {
+          background: "#D4EDDA",
+          icon: "#155724",
+          text: "#155724",
+          iconName: "checkmark-circle-outline" as const,
+        };
+
+      case "Recusado":
+        return {
+          background: "#F8D7DA",
+          icon: "#721C24",
+          text: "#721C24",
+          iconName: "close-circle-outline" as const,
         };
 
       case "Concluído":
         return {
-          background: "#E5F5EC",
-          text: "#16A36A",
-          icon: "checkmark-circle-outline" as const,
+          background: "#D4EDDA",
+          icon: "#155724",
+          text: "#155724",
+          iconName: "checkmark-done-circle-outline" as const,
+        };
+
+      case "Cancelado":
+        return {
+          background: "#E2E3E5",
+          icon: "#383D41",
+          text: "#383D41",
+          iconName: "ban-outline" as const,
+        };
+
+      default:
+        return {
+          background: "#E2E3E5",
+          icon: "#383D41",
+          text: "#383D41",
+          iconName: "help-circle-outline" as const,
         };
     }
-  }
+  };
 
   function toggleRequest(id: number) {
     setExpandedRequest((current) => (current === id ? null : id));
@@ -249,7 +285,7 @@ export default function MyRequestsScreen() {
                   ]}
                 >
                   <Ionicons
-                    name={statusStyle.icon}
+                    name={statusStyle.iconName}
                     size={15}
                     color={statusStyle.text}
                   />
@@ -660,19 +696,19 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   evaluateButton: {
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 8,
-  backgroundColor: "#16A36A",
-  borderRadius: 12,
-  paddingVertical: 12,
-  marginTop: 15,
-},
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#16A36A",
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginTop: 15,
+  },
 
-evaluateButtonText: {
-  color: "#FFFFFF",
-  fontSize: 12,
-  fontWeight: "700",
-},
+  evaluateButtonText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
 });
