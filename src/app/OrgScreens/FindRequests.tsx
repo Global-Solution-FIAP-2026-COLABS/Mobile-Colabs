@@ -1,4 +1,3 @@
-
 import { useMemo, useState } from "react";
 import {
   View,
@@ -53,10 +52,7 @@ function formatDate(date: string) {
 
 function getRequestCategories(request: DonationResponse) {
   const labels = (request.items ?? []).map(
-    (item) =>
-      item.categoryLabel ||
-      categoryLabels[item.category] ||
-      "Outros",
+    (item) => item.categoryLabel || categoryLabels[item.category] || "Outros",
   );
 
   return [...new Set(labels)];
@@ -68,14 +64,8 @@ export default function FindRequestsScreen() {
   const [selectedInstitution, setSelectedInstitution] = useState("Todas");
   const [itemType, setItemType] = useState("");
 
-  const {
-    data,
-    isLoading,
-    isError,
-    error,
-    refetch,
-    isRefetching,
-  } = useCommunityDonations();
+  const { data, isLoading, isError, error, refetch, isRefetching } =
+    useCommunityDonations();
 
   const fulfillMutation = useFulfillDonation();
 
@@ -84,10 +74,7 @@ export default function FindRequestsScreen() {
   // Instituições disponíveis
   const institutionOptions = useMemo(() => {
     const institutions = requests
-      .map(
-        (request) =>
-          request.collectionPointName || "Sem ponto de coleta",
-      )
+      .map((request) => request.collectionPointName || "Sem ponto de coleta")
       .filter((institution) => institution.trim().length > 0);
 
     return ["Todas", ...Array.from(new Set(institutions))];
@@ -103,27 +90,21 @@ export default function FindRequestsScreen() {
         request.citizenName.toLowerCase().includes(search) ||
         request.title.toLowerCase().includes(search) ||
         request.description.toLowerCase().includes(search) ||
-        request.items.some((item) =>
-          item.name.toLowerCase().includes(search),
-        );
+        request.items.some((item) => item.name.toLowerCase().includes(search));
 
       const matchesCategory =
         selectedCategory === "Todas" ||
         requestCategories.includes(selectedCategory);
 
-      const institution =
-        request.collectionPointName || "Sem ponto de coleta";
+      const institution = request.collectionPointName || "Sem ponto de coleta";
 
       const matchesInstitution =
-        selectedInstitution === "Todas" ||
-        institution === selectedInstitution;
+        selectedInstitution === "Todas" || institution === selectedInstitution;
 
       const matchesItem =
         !itemType.trim() ||
         request.items.some((item) =>
-          item.name
-            .toLowerCase()
-            .includes(itemType.toLowerCase().trim()),
+          item.name.toLowerCase().includes(itemType.toLowerCase().trim()),
         );
 
       return (
@@ -135,13 +116,7 @@ export default function FindRequestsScreen() {
         matchesItem
       );
     });
-  }, [
-    requests,
-    searchText,
-    selectedCategory,
-    selectedInstitution,
-    itemType,
-  ]);
+  }, [requests, searchText, selectedCategory, selectedInstitution, itemType]);
 
   function clearFilters() {
     setSearchText("");
@@ -153,35 +128,46 @@ export default function FindRequestsScreen() {
   // Assumir pedido
   async function handleFulfill(request: DonationResponse) {
     Alert.alert(
-      "Assumir pedido",
-      `Deseja assumir o pedido "${request.title}"?`,
+      "Confirmar ajuda",
+      `Deseja aceitar o pedido de ${request.citizenName}?`,
       [
         {
           text: "Cancelar",
           style: "cancel",
         },
         {
-          text: "Quero ajudar",
+          text: "Confirmar",
           onPress: async () => {
             try {
               await fulfillMutation.mutateAsync(request.id);
 
-              Alert.alert(
-                "Pedido assumido!",
-                "Você agora está responsável por atender este pedido.",
-              );
-
-              await refetch();
-            } catch (err) {
+              router.push({
+                pathname: "/OrgScreens/DeliverDonation",
+                params: {
+                  requestId: String(request.id),
+                  user: request.citizenName,
+                  category:
+                    request.aiSuggestedCategory ??
+                    request.items?.[0]?.categoryLabel ??
+                    "Não informada",
+                  institution: request.collectionPointName ?? "",
+                  donorType: "CITIZEN",
+                  items: JSON.stringify(
+                    (request.items ?? []).map((item) => ({
+                      name: item.name,
+                      quantity: item.quantity,
+                    })),
+                  ),
+                  description: request.description ?? "",
+                },
+              } as any);
+            } catch (error) {
               const message =
-                err instanceof Error
-                  ? err.message
-                  : "Não foi possível assumir o pedido.";
+                error instanceof Error
+                  ? error.message
+                  : "Não foi possível aceitar o pedido.";
 
-              Alert.alert(
-                "Não foi possível continuar",
-                message,
-              );
+              Alert.alert("Erro", message);
             }
           },
         },
@@ -197,8 +183,7 @@ export default function FindRequestsScreen() {
         id: String(request.id),
         user: request.citizenName,
         category: getRequestCategories(request).join(", "),
-        institution:
-          request.collectionPointName || "Sem ponto de coleta",
+        institution: request.collectionPointName || "Sem ponto de coleta",
         description: request.description,
         date: formatDate(request.createdAt),
         status: request.status,
@@ -225,17 +210,11 @@ export default function FindRequestsScreen() {
               }
             }}
           >
-            <Ionicons
-              name="arrow-back"
-              size={22}
-              color="#173D2E"
-            />
+            <Ionicons name="arrow-back" size={22} color="#173D2E" />
           </TouchableOpacity>
 
           <View style={styles.headerText}>
-            <Text style={styles.title}>
-              Encontrar pedidos
-            </Text>
+            <Text style={styles.title}>Encontrar pedidos</Text>
 
             <Text style={styles.subtitle}>
               Encontre pessoas que precisam de ajuda.
@@ -245,11 +224,7 @@ export default function FindRequestsScreen() {
 
         {/* Pesquisa */}
         <View style={styles.searchContainer}>
-          <Ionicons
-            name="search-outline"
-            size={20}
-            color="#89958D"
-          />
+          <Ionicons name="search-outline" size={20} color="#89958D" />
 
           <TextInput
             style={styles.searchInput}
@@ -263,28 +238,18 @@ export default function FindRequestsScreen() {
         {/* Filtros */}
         <View style={styles.filterHeader}>
           <View style={styles.filterTitleContainer}>
-            <Ionicons
-              name="options-outline"
-              size={19}
-              color="#173D2E"
-            />
+            <Ionicons name="options-outline" size={19} color="#173D2E" />
 
-            <Text style={styles.sectionTitle}>
-              Filtros
-            </Text>
+            <Text style={styles.sectionTitle}>Filtros</Text>
           </View>
 
           <TouchableOpacity onPress={clearFilters}>
-            <Text style={styles.clearText}>
-              Limpar filtros
-            </Text>
+            <Text style={styles.clearText}>Limpar filtros</Text>
           </TouchableOpacity>
         </View>
 
         {/* Categoria */}
-        <Text style={styles.filterLabel}>
-          Categoria
-        </Text>
+        <Text style={styles.filterLabel}>Categoria</Text>
 
         <ScrollView
           horizontal
@@ -317,16 +282,10 @@ export default function FindRequestsScreen() {
         </ScrollView>
 
         {/* Proximidade */}
-        <Text style={styles.filterLabel}>
-          Proximidade
-        </Text>
+        <Text style={styles.filterLabel}>Proximidade</Text>
 
         <View style={styles.itemSearchContainer}>
-          <Ionicons
-            name="location-outline"
-            size={19}
-            color="#89958D"
-          />
+          <Ionicons name="location-outline" size={19} color="#89958D" />
 
           <Text style={styles.unavailableText}>
             Distância não disponível nos dados do pedido.
@@ -334,9 +293,7 @@ export default function FindRequestsScreen() {
         </View>
 
         {/* Instituição */}
-        <Text style={styles.filterLabel}>
-          Instituição vinculada
-        </Text>
+        <Text style={styles.filterLabel}>Instituição vinculada</Text>
 
         <ScrollView
           horizontal
@@ -344,8 +301,7 @@ export default function FindRequestsScreen() {
           contentContainerStyle={styles.categoryList}
         >
           {institutionOptions.map((institution) => {
-            const selected =
-              selectedInstitution === institution;
+            const selected = selectedInstitution === institution;
 
             return (
               <TouchableOpacity
@@ -354,9 +310,7 @@ export default function FindRequestsScreen() {
                   styles.categoryButton,
                   selected && styles.categoryButtonSelected,
                 ]}
-                onPress={() =>
-                  setSelectedInstitution(institution)
-                }
+                onPress={() => setSelectedInstitution(institution)}
               >
                 <Text
                   style={[
@@ -372,16 +326,10 @@ export default function FindRequestsScreen() {
         </ScrollView>
 
         {/* Tipo de item */}
-        <Text style={styles.filterLabel}>
-          Tipo de item
-        </Text>
+        <Text style={styles.filterLabel}>Tipo de item</Text>
 
         <View style={styles.itemSearchContainer}>
-          <Ionicons
-            name="cube-outline"
-            size={19}
-            color="#89958D"
-          />
+          <Ionicons name="cube-outline" size={19} color="#89958D" />
 
           <TextInput
             style={styles.searchInput}
@@ -395,29 +343,20 @@ export default function FindRequestsScreen() {
         {/* Resultados */}
         <View style={styles.resultsHeader}>
           <View>
-            <Text style={styles.sectionTitle}>
-              Pedidos disponíveis
-            </Text>
+            <Text style={styles.sectionTitle}>Pedidos disponíveis</Text>
 
             <Text style={styles.resultsSubtitle}>
               {filteredRequests.length} pedido(s) encontrado(s)
             </Text>
           </View>
 
-          <Ionicons
-            name="list-outline"
-            size={22}
-            color="#16A36A"
-          />
+          <Ionicons name="list-outline" size={22} color="#16A36A" />
         </View>
 
         {/* Carregamento */}
         {isLoading ? (
           <View style={styles.emptyContainer}>
-            <ActivityIndicator
-              size="large"
-              color="#16A36A"
-            />
+            <ActivityIndicator size="large" color="#16A36A" />
 
             <Text style={styles.emptyText}>
               Carregando pedidos comunitários...
@@ -425,11 +364,7 @@ export default function FindRequestsScreen() {
           </View>
         ) : isError ? (
           <View style={styles.emptyContainer}>
-            <Ionicons
-              name="alert-circle-outline"
-              size={38}
-              color="#C75B5B"
-            />
+            <Ionicons name="alert-circle-outline" size={38} color="#C75B5B" />
 
             <Text style={styles.emptyTitle}>
               Não foi possível carregar os pedidos
@@ -445,38 +380,26 @@ export default function FindRequestsScreen() {
               style={styles.retryButton}
               onPress={() => refetch()}
             >
-              <Text style={styles.retryButtonText}>
-                Tentar novamente
-              </Text>
+              <Text style={styles.retryButtonText}>Tentar novamente</Text>
             </TouchableOpacity>
           </View>
         ) : filteredRequests.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons
-              name="search-outline"
-              size={38}
-              color="#AAB5AE"
-            />
+            <Ionicons name="search-outline" size={38} color="#AAB5AE" />
 
-            <Text style={styles.emptyTitle}>
-              Nenhum pedido encontrado
-            </Text>
+            <Text style={styles.emptyTitle}>Nenhum pedido encontrado</Text>
 
             <Text style={styles.emptyText}>
-              Tente alterar os filtros ou volte mais tarde
-              para conferir novos pedidos.
+              Tente alterar os filtros ou volte mais tarde para conferir novos
+              pedidos.
             </Text>
           </View>
         ) : (
           filteredRequests.map((request) => {
-            const requestCategories =
-              getRequestCategories(request);
+            const requestCategories = getRequestCategories(request);
 
             return (
-              <View
-                key={request.id}
-                style={styles.requestCard}
-              >
+              <View key={request.id} style={styles.requestCard}>
                 <TouchableOpacity
                   activeOpacity={0.8}
                   onPress={() => openRequest(request)}
@@ -488,14 +411,10 @@ export default function FindRequestsScreen() {
                       </Text>
                     </View>
 
-                    <Text style={styles.statusText}>
-                      Disponível
-                    </Text>
+                    <Text style={styles.statusText}>Disponível</Text>
                   </View>
 
-                  <Text style={styles.userName}>
-                    {request.citizenName}
-                  </Text>
+                  <Text style={styles.userName}>{request.citizenName}</Text>
 
                   <Text style={styles.requestDescription}>
                     {request.title}
@@ -529,18 +448,11 @@ export default function FindRequestsScreen() {
                   </View>
 
                   <View style={styles.cardInfo}>
-                    <Ionicons
-                      name="cube-outline"
-                      size={16}
-                      color="#718078"
-                    />
+                    <Ionicons name="cube-outline" size={16} color="#718078" />
 
                     <Text style={styles.cardInfoText}>
                       {request.items
-                        .map(
-                          (item) =>
-                            `${item.name} (${item.quantity})`,
-                        )
+                        .map((item) => `${item.name} (${item.quantity})`)
                         .join(", ")}
                     </Text>
                   </View>
@@ -550,50 +462,17 @@ export default function FindRequestsScreen() {
                       Visualizar pedido
                     </Text>
 
-                    <Ionicons
-                      name="arrow-forward"
-                      size={18}
-                      color="#16A36A"
-                    />
+                    <Ionicons name="arrow-forward" size={18} color="#16A36A" />
                   </View>
                 </TouchableOpacity>
 
-                {/* Assumir pedido */}
-                <TouchableOpacity
-                  style={[
-                    styles.fulfillButton,
-                    fulfillMutation.isPending &&
-                      styles.fulfillButtonDisabled,
-                  ]}
-                  disabled={fulfillMutation.isPending}
-                  onPress={() => handleFulfill(request)}
-                >
-                  {fulfillMutation.isPending ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <>
-                      <Ionicons
-                        name="hand-left-outline"
-                        size={17}
-                        color="#FFFFFF"
-                      />
-
-                      <Text style={styles.fulfillButtonText}>
-                        Quero ajudar
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
               </View>
             );
           })
         )}
 
         {isRefetching && !isLoading && (
-          <ActivityIndicator
-            style={{ marginVertical: 12 }}
-            color="#16A36A"
-          />
+          <ActivityIndicator style={{ marginVertical: 12 }} color="#16A36A" />
         )}
       </ScrollView>
     </View>

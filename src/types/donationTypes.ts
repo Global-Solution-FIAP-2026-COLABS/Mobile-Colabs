@@ -19,7 +19,7 @@ export interface DonationCreateRequest {
   title: string;
   description: string;
   citizenId: number;
-  collectionPointId?: number;
+  collectionPointId?: number | null;
   items: DonationItemRequest[];
 }
 

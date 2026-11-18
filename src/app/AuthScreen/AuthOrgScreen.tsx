@@ -294,6 +294,17 @@ export default function AuthOrgScreen() {
               <Text style={styles.buttonArrow}>→</Text>
             )}
           </TouchableOpacity>
+          {/* Link para login */}
+          <View style={styles.loginContainer}>
+            <Text style={styles.loginText}>Já possui uma conta? </Text>
+
+            <TouchableOpacity
+              onPress={() => router.replace("/AuthScreen/LoginOrgScreen")}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.loginLink}>Faça login</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

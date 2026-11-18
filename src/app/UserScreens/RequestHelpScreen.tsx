@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import {
   View,
@@ -13,7 +14,6 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useCollectionPoints } from "../../hooks/useCollectionPoints";
 
 import { useCreateDonation } from "../../hooks/useDonation";
 import { getCitizenId, ApiError } from "../../api/api";
@@ -29,11 +29,13 @@ type HelpItem = {
 
 type FormData = {
   title: string;
-  institutionId: number | null;
   description: string;
 };
 
-const categories = [
+const categories: {
+  label: string;
+  value: DonationCategory;
+}[] = [
   { label: "Alimentos", value: "FOOD" },
   { label: "Roupas", value: "CLOTHING" },
   { label: "Higiene", value: "HYGIENE" },
@@ -45,16 +47,8 @@ const categories = [
 export default function RequestHelpScreen() {
   const createDonation = useCreateDonation();
 
-  const { data, isLoading, isError, refetch } = useCollectionPoints();
-
-  const institutions = data?.content ?? [];
-  const activeInstitutions = institutions.filter(
-    (institution) => institution.active,
-  );
-
   const [formData, setFormData] = useState<FormData>({
     title: "",
-    institutionId: null,
     description: "",
   });
 
@@ -62,18 +56,11 @@ export default function RequestHelpScreen() {
     { id: 1, name: "", quantity: "1", category: "" },
   ]);
 
-  function updateFormData(
-    field: keyof FormData,
-    value: string | number | null,
-  ) {
+  function updateFormData(field: keyof FormData, value: string) {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
     }));
-  }
-
-  function handleInstitutionSelection(id: number) {
-    updateFormData("institutionId", id);
   }
 
   function updateItem(
@@ -82,7 +69,9 @@ export default function RequestHelpScreen() {
     value: string,
   ) {
     setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
+      prev.map((item) =>
+        item.id === id ? { ...item, [field]: value } : item,
+      ),
     );
   }
 
@@ -113,16 +102,14 @@ export default function RequestHelpScreen() {
       return;
     }
 
-    if (formData.institutionId === null) {
-      Alert.alert("Atenção", "Selecione uma instituição.");
-      return;
-    }
-
     if (
       formData.description.trim().length < 10 ||
       formData.description.trim().length > 500
     ) {
-      Alert.alert("Atenção", "A descrição deve ter entre 10 e 500 caracteres.");
+      Alert.alert(
+        "Atenção",
+        "A descrição deve ter entre 10 e 500 caracteres.",
+      );
       return;
     }
 
@@ -143,18 +130,6 @@ export default function RequestHelpScreen() {
       return;
     }
 
-    const selectedInstitution = activeInstitutions.find(
-      (institution) => institution.id === formData.institutionId,
-    );
-
-    if (!selectedInstitution) {
-      Alert.alert(
-        "Atenção",
-        "A instituição selecionada não está mais disponível.",
-      );
-      return;
-    }
-
     try {
       const citizenId = await getCitizenId();
 
@@ -171,13 +146,15 @@ export default function RequestHelpScreen() {
         title: formData.title.trim(),
         description: formData.description.trim(),
         citizenId,
-        collectionPointId: formData.institutionId,
+        collectionPointId: null,
         items: items.map((item) => ({
           name: item.name.trim(),
           quantity: Number(item.quantity),
           category: item.category as DonationCategory,
         })),
       };
+
+      console.log("Enviando pedido de ajuda:", requestData);
 
       const response = await createDonation.mutateAsync(requestData);
 
@@ -243,8 +220,8 @@ export default function RequestHelpScreen() {
           </View>
 
           <Text style={styles.infoText}>
-            Preencha as informações abaixo para que uma instituição possa
-            conhecer sua necessidade.
+            Preencha as informações abaixo para que as instituições possam
+            conhecer sua necessidade e oferecer ajuda.
           </Text>
         </View>
 
@@ -267,72 +244,9 @@ export default function RequestHelpScreen() {
             maxLength={120}
           />
 
-          <Text style={styles.characterCount}>{formData.title.length}/120</Text>
-        </View>
-
-        {/* Instituições */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Instituição desejada <Text style={styles.required}>*</Text>
+          <Text style={styles.characterCount}>
+            {formData.title.length}/120
           </Text>
-
-          <Text style={styles.helperText}>
-            Escolha a instituição para a qual deseja enviar seu pedido.
-          </Text>
-
-          {isLoading ? (
-            <ActivityIndicator size="large" color="#16A36A" />
-          ) : isError ? (
-            <TouchableOpacity onPress={() => refetch()}>
-              <Text style={styles.helperText}>
-                Erro ao carregar instituições. Toque para tentar novamente.
-              </Text>
-            </TouchableOpacity>
-          ) : activeInstitutions.length === 0 ? (
-            <Text style={styles.helperText}>
-              Nenhuma instituição disponível no momento.
-            </Text>
-          ) : (
-            activeInstitutions.map((institution) => {
-              const selected = formData.institutionId === institution.id;
-
-              return (
-                <TouchableOpacity
-                  key={institution.id}
-                  style={[
-                    styles.institutionCard,
-                    selected && styles.institutionSelected,
-                  ]}
-                  onPress={() => handleInstitutionSelection(institution.id)}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.institutionIcon}>
-                    <Ionicons
-                      name="business-outline"
-                      size={22}
-                      color="#16A36A"
-                    />
-                  </View>
-
-                  <View style={styles.institutionInfo}>
-                    <Text style={styles.institutionName}>
-                      {institution.name}
-                    </Text>
-
-                    <Text style={styles.institutionDistance}>
-                      {institution.neighborhood || institution.address}
-                    </Text>
-                  </View>
-
-                  <Ionicons
-                    name={selected ? "radio-button-on" : "radio-button-off"}
-                    size={22}
-                    color={selected ? "#16A36A" : "#AAB5AE"}
-                  />
-                </TouchableOpacity>
-              );
-            })
-          )}
         </View>
 
         {/* Descrição */}
@@ -401,7 +315,9 @@ export default function RequestHelpScreen() {
                 placeholder="Ex: Arroz 5kg"
                 placeholderTextColor="#9CA9A1"
                 value={item.name}
-                onChangeText={(value) => updateItem(item.id, "name", value)}
+                onChangeText={(value) =>
+                  updateItem(item.id, "name", value)
+                }
                 maxLength={120}
               />
 
@@ -414,7 +330,11 @@ export default function RequestHelpScreen() {
                 keyboardType="number-pad"
                 value={item.quantity}
                 onChangeText={(value) =>
-                  updateItem(item.id, "quantity", value.replace(/\D/g, ""))
+                  updateItem(
+                    item.id,
+                    "quantity",
+                    value.replace(/\D/g, ""),
+                  )
                 }
               />
 
@@ -594,42 +514,6 @@ const styles = StyleSheet.create({
   },
   categoryTextSelected: {
     color: "#16A36A",
-  },
-  institutionCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 15,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#E5EDE8",
-    gap: 12,
-  },
-  institutionSelected: {
-    borderColor: "#16A36A",
-    backgroundColor: "#F0FAF4",
-  },
-  institutionIcon: {
-    width: 43,
-    height: 43,
-    borderRadius: 12,
-    backgroundColor: "#E5F5EC",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  institutionInfo: {
-    flex: 1,
-  },
-  institutionName: {
-    color: "#173D2E",
-    fontSize: 13,
-    fontWeight: "700",
-  },
-  institutionDistance: {
-    color: "#89958D",
-    fontSize: 11,
-    marginTop: 5,
   },
   descriptionInput: {
     backgroundColor: "#FFFFFF",

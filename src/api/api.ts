@@ -37,6 +37,17 @@ export async function getCitizenId(): Promise<number | null> {
   return id ? Number(id) : null;
 }
 
+export async function removeCitizenId() {
+  await AsyncStorage.removeItem(CITIZEN_ID_KEY);
+}
+
+export async function clearSession() {
+  await Promise.all([
+    removeToken(),
+    removeCitizenId(),
+  ]);
+}
+
 export async function apiFetch<T>(
   endpoint: string,
   options: RequestInit = {},

@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import {
   View,
@@ -12,6 +11,8 @@ import {
   Alert,
 } from "react-native";
 import { router } from "expo-router";
+import { useLogin } from "../../hooks/useAuth";
+import { clearSession } from "../../api/api";
 
 type FormData = {
   email: string;
@@ -31,19 +32,46 @@ export default function LoginOrgScreen() {
     }));
   }
 
-  function handleLogin() {
+  async function handleLogin() {
     const { email, password } = formData;
 
-    if (!email || !password) {
+    if (!email.trim() || !password) {
       Alert.alert("Atenção", "Preencha seu e-mail e senha.");
       return;
     }
 
-    Alert.alert(
-      "Login",
-      "Dados preenchidos! Agora podemos integrar a autenticação com a API."
-    );
+    try {
+      const response = await loginMutation.mutateAsync({
+        email: email.trim(),
+        password,
+      });
+
+      if (
+        response.role !== "ROLE_POINT_MANAGER" ||
+        response.collectionPointId === null
+      ) {
+        await clearSession();
+
+        Alert.alert(
+          "Acesso não permitido",
+          "Esta conta não pertence a uma instituição.",
+        );
+
+        return;
+      }
+
+      router.replace("/OrgScreens/HomeInstitution");
+    } catch (error) {
+      Alert.alert(
+        "Erro no login",
+        error instanceof Error
+          ? error.message
+          : "Não foi possível realizar o login.",
+      );
+    }
   }
+
+  const loginMutation = useLogin();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -90,9 +118,7 @@ export default function LoginOrgScreen() {
               placeholder="seuemail@exemplo.com"
               placeholderTextColor="#A0AAA4"
               value={formData.email}
-              onChangeText={(value) =>
-                updateFormData("email", value)
-              }
+              onChangeText={(value) => updateFormData("email", value)}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
@@ -104,9 +130,7 @@ export default function LoginOrgScreen() {
               placeholder="Digite sua senha"
               placeholderTextColor="#A0AAA4"
               value={formData.password}
-              onChangeText={(value) =>
-                updateFormData("password", value)
-              }
+              onChangeText={(value) => updateFormData("password", value)}
               secureTextEntry
             />
           </View>
@@ -115,17 +139,18 @@ export default function LoginOrgScreen() {
           <View style={styles.footer}>
             <TouchableOpacity
               style={styles.button}
-              onPress={() => router.push("/OrgScreens/HomeInstitution")}
+              onPress={handleLogin}
+              disabled={loginMutation.isPending}
               activeOpacity={0.8}
             >
-              <Text style={styles.buttonText}>Entrar</Text>
+              <Text style={styles.buttonText}>
+                {loginMutation.isPending ? "Entrando..." : "Entrar"}
+              </Text>
               <Text style={styles.buttonArrow}>→</Text>
             </TouchableOpacity>
 
             <View style={styles.registerContainer}>
-              <Text style={styles.registerText}>
-                Ainda não possui conta?
-              </Text>
+              <Text style={styles.registerText}>Ainda não possui conta?</Text>
 
               <TouchableOpacity onPress={() => router.replace("/")}>
                 <Text style={styles.registerLink}> Cadastre-se</Text>

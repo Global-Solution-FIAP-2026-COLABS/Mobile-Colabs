@@ -1,12 +1,16 @@
+
 import {
   View,
   Text,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
+  Alert,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
+import { useFulfillDonation } from "../../hooks/useDonation";
 
 type RequestItem = {
   name: string;
@@ -14,7 +18,8 @@ type RequestItem = {
 };
 
 export default function ViewRequestScreen() {
-  const params = useLocalSearchParams<{
+  
+    const params = useLocalSearchParams<{
     id: string;
     user: string;
     category: string;
@@ -26,10 +31,16 @@ export default function ViewRequestScreen() {
     items: string;
   }>();
 
+  const fulfillMutation = useFulfillDonation();
+
   let items: RequestItem[] = [];
 
   try {
-    items = JSON.parse(params.items || "[]");
+    const parsedItems = JSON.parse(params.items || "[]");
+
+    if (Array.isArray(parsedItems)) {
+      items = parsedItems;
+    }
   } catch {
     items = [];
   }
@@ -42,18 +53,55 @@ export default function ViewRequestScreen() {
     }
   }
 
-  function handleRegisterDonation() {
-    router.push({
-      pathname: "/OrgScreens/RegisterDonation",
-      params: {
-        requestId: params.id,
-        user: params.user,
-        category: params.category,
-        institution: params.institution,
-        items: params.items,
-      },
-    } as any);
+  function handleFulfill() {
+  if (!params.id || isNaN(Number(params.id))) {
+    Alert.alert("Erro", "Não foi possível identificar o pedido.");
+    return;
   }
+
+  Alert.alert(
+    "Confirmar ajuda",
+    `Deseja aceitar o pedido de ${params.user || "este cidadão"}?`,
+    [
+      {
+        text: "Cancelar",
+        style: "cancel",
+      },
+      {
+        text: "Confirmar",
+        onPress: async () => {
+          try {
+            const fulfilledDonation = await fulfillMutation.mutateAsync(
+              Number(params.id)
+            );
+
+            console.log("Pedido aceito:", fulfilledDonation);
+
+            router.replace({
+              pathname: "/OrgScreens/DeliverDonation",
+              params: {
+                requestId: params.id,
+                user: params.user || "",
+                category: params.category || "Não informada",
+                institution: params.institution || "",
+                donorType: "CITIZEN",
+                items: JSON.stringify(items),
+                description: params.description || "",
+              },
+            });
+          } catch (error) {
+            const message =
+              error instanceof Error
+                ? error.message
+                : "Não foi possível aceitar o pedido.";
+
+            Alert.alert("Erro", message);
+          }
+        },
+      },
+    ]
+  );
+}
 
   return (
     <View style={styles.container}>
@@ -78,7 +126,9 @@ export default function ViewRequestScreen() {
         {/* Identificação do pedido */}
         <View style={styles.requestHeader}>
           <View style={styles.categoryBadge}>
-            <Text style={styles.categoryBadgeText}>{params.category}</Text>
+            <Text style={styles.categoryBadgeText}>
+              {params.category || "Não informada"}
+            </Text>
           </View>
 
           <Text style={styles.requestId}>Pedido #{params.id}</Text>
@@ -87,29 +137,41 @@ export default function ViewRequestScreen() {
         {/* Informações do solicitante */}
         <View style={styles.card}>
           <View style={styles.sectionHeading}>
-            <Ionicons name="person-circle-outline" size={21} color="#16A36A" />
-            <Text style={styles.sectionTitle}>Informações do solicitante</Text>
+            <Ionicons
+              name="person-circle-outline"
+              size={21}
+              color="#16A36A"
+            />
+            <Text style={styles.sectionTitle}>
+              Informações do solicitante
+            </Text>
           </View>
 
           <Text style={styles.label}>Nome</Text>
-          <Text style={styles.value}>{params.user}</Text>
+          <Text style={styles.value}>{params.user || "Não informado"}</Text>
 
           <View style={styles.infoDivider} />
 
           <Text style={styles.label}>Instituição vinculada</Text>
-          <Text style={styles.value}>{params.institution}</Text>
+          <Text style={styles.value}>
+            {params.institution || "Aguardando instituição"}
+          </Text>
 
           <View style={styles.infoDivider} />
 
           <View style={styles.infoRow}>
             <View style={styles.infoColumn}>
               <Text style={styles.label}>Distância</Text>
-              <Text style={styles.value}>{params.distance} km</Text>
+              <Text style={styles.value}>
+                {params.distance ? `${params.distance} km` : "Não informada"}
+              </Text>
             </View>
 
             <View style={styles.infoColumn}>
               <Text style={styles.label}>Data do pedido</Text>
-              <Text style={styles.value}>{params.date}</Text>
+              <Text style={styles.value}>
+                {params.date || "Não informada"}
+              </Text>
             </View>
           </View>
         </View>
@@ -117,11 +179,19 @@ export default function ViewRequestScreen() {
         {/* Descrição */}
         <View style={styles.card}>
           <View style={styles.sectionHeading}>
-            <Ionicons name="document-text-outline" size={21} color="#16A36A" />
-            <Text style={styles.sectionTitle}>Descrição da necessidade</Text>
+            <Ionicons
+              name="document-text-outline"
+              size={21}
+              color="#16A36A"
+            />
+            <Text style={styles.sectionTitle}>
+              Descrição da necessidade
+            </Text>
           </View>
 
-          <Text style={styles.description}>{params.description}</Text>
+          <Text style={styles.description}>
+            {params.description || "Nenhuma descrição informada."}
+          </Text>
         </View>
 
         {/* Itens necessários */}
@@ -158,7 +228,9 @@ export default function ViewRequestScreen() {
                 </View>
 
                 <View style={styles.quantityBadge}>
-                  <Text style={styles.quantityText}>{item.quantity} un.</Text>
+                  <Text style={styles.quantityText}>
+                    {item.quantity} un.
+                  </Text>
                 </View>
               </View>
             ))
@@ -186,18 +258,32 @@ export default function ViewRequestScreen() {
 
           <View style={styles.statusInfo}>
             <Text style={styles.statusLabel}>Situação do pedido</Text>
-            <Text style={styles.statusValue}>{params.status}</Text>
+            <Text style={styles.statusValue}>
+              {params.status || "Pendente"}
+            </Text>
           </View>
         </View>
 
+        {/* Aceitar pedido e registrar doação */}
         <TouchableOpacity
-          style={styles.donationButton}
-          onPress={handleRegisterDonation}
+          style={[
+            styles.donationButton,
+            fulfillMutation.isPending && styles.donationButtonDisabled,
+          ]}
+          onPress={handleFulfill}
+          disabled={fulfillMutation.isPending}
           activeOpacity={0.85}
         >
-          <Ionicons name="gift-outline" size={21} color="#FFFFFF" />
-
-          <Text style={styles.donationButtonText}>Registrar doação</Text>
+          {fulfillMutation.isPending ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <>
+              <Ionicons name="gift-outline" size={21} color="#FFFFFF" />
+              <Text style={styles.donationButtonText}>
+                Registrar doação
+              </Text>
+            </>
+          )}
         </TouchableOpacity>
 
         <Text style={styles.footer}>
@@ -426,19 +512,21 @@ const styles = StyleSheet.create({
     marginTop: 25,
   },
   donationButton: {
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 10,
-  backgroundColor: "#16A36A",
-  padding: 16,
-  borderRadius: 13,
-  marginTop: 18,
-},
-
-donationButtonText: {
-  color: "#FFFFFF",
-  fontSize: 15,
-  fontWeight: "700",
-},
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#16A36A",
+    padding: 16,
+    borderRadius: 13,
+    marginTop: 18,
+  },
+  donationButtonDisabled: {
+    opacity: 0.6,
+  },
+  donationButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
+  },
 });

@@ -13,47 +13,31 @@ import MapView, { Marker, Region } from "react-native-maps";
 import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 
-// Dados temporários para visualizar os marcadores.
-// Depois, eles serão substituídos pelos dados da API.
-const institutions = [
-  {
-    id: 1,
-    name: "Instituição Esperança",
-    description: "Recebe alimentos e roupas",
-    latitude: -23.5505,
-    longitude: -46.6333,
-  },
-  {
-    id: 2,
-    name: "Centro Solidário",
-    description: "Recebe produtos de higiene",
-    latitude: -23.558,
-    longitude: -46.64,
-  },
-];
-
-const helpRequests = [
-  {
-    id: 1,
-    name: "Pedido de alimentos",
-    description: "Família precisa de alimentos básicos",
-    latitude: -23.545,
-    longitude: -46.625,
-  },
-  {
-    id: 2,
-    name: "Pedido de roupas",
-    description: "Doação de roupas em bom estado",
-    latitude: -23.562,
-    longitude: -46.628,
-  },
-];
+import { clearSession } from "../../api/api";
+import { useCollectionPoints } from "../../hooks/useCollectionPoints";
+import { useCommunityDonations } from "../../hooks/useDonation";
 
 const initialRegion: Region = {
   latitude: -23.5505,
   longitude: -46.6333,
   latitudeDelta: 0.025,
   longitudeDelta: 0.025,
+};
+
+type InstitutionMarker = {
+  id: number;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+};
+
+type HelpRequestMarker = {
+  id: number;
+  title: string;
+  description: string;
+  latitude: number;
+  longitude: number;
 };
 
 export default function HomeScreen() {
@@ -63,15 +47,158 @@ export default function HomeScreen() {
   const [searchText, setSearchText] = useState("");
   const [searching, setSearching] = useState(false);
 
+  const [institutionMarkers, setInstitutionMarkers] = useState<
+    InstitutionMarker[]
+  >([]);
+
+  const [helpRequestMarkers, setHelpRequestMarkers] = useState<
+    HelpRequestMarker[]
+  >([]);
+
   const [searchMarker, setSearchMarker] = useState<{
     latitude: number;
     longitude: number;
     title: string;
   } | null>(null);
 
+  // Busca os pontos de coleta cadastrados no backend
+  const {
+    data: collectionPoints,
+    isLoading: loadingPoints,
+    isError: errorPoints,
+  } = useCollectionPoints();
+
+  // Busca os pedidos de ajuda da comunidade
+  const {
+    data: donations,
+    isLoading: loadingDonations,
+    isError: errorDonations,
+  } = useCommunityDonations();
+
+  // Obtém a localização atual do usuário
   useEffect(() => {
     getUserLocation();
   }, []);
+
+  // Converte os endereços das instituições em coordenadas
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadInstitutionMarkers() {
+      if (!collectionPoints?.content) {
+        setInstitutionMarkers([]);
+        return;
+      }
+
+      const markers: InstitutionMarker[] = [];
+
+      for (const point of collectionPoints.content) {
+        if (point.active !== true || !point.address?.trim()) {
+          continue;
+        }
+
+        const address = [point.address, point.neighborhood, "Brasil"]
+          .filter(Boolean)
+          .join(", ");
+
+        try {
+          const results = await Location.geocodeAsync(address);
+
+          if (results.length > 0) {
+            markers.push({
+              id: point.id,
+              name: point.name,
+              address,
+              latitude: results[0].latitude,
+              longitude: results[0].longitude,
+            });
+          }
+        } catch (error) {
+          console.log(
+            `Não foi possível localizar a instituição ${point.name}:`,
+            error,
+          );
+        }
+      }
+
+      if (!cancelled) {
+        setInstitutionMarkers(markers);
+      }
+    }
+
+    loadInstitutionMarkers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [collectionPoints]);
+
+  // Converte os endereços dos pedidos em coordenadas
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHelpRequestMarkers() {
+      console.log("========== PEDIDOS DO MAPA ==========");
+
+      console.log(
+        "Quantidade de pedidos recebidos:",
+        donations?.content?.length ?? 0,
+      );
+
+      if (!donations?.content) {
+        setHelpRequestMarkers([]);
+        return;
+      }
+
+      const markers: HelpRequestMarker[] = [];
+
+      for (const donation of donations.content) {
+        console.log("Pedido:", donation.id);
+        console.log("Título:", donation.title);
+        console.log("Endereço recebido:", donation.citizenAddress);
+
+        const address = donation.citizenAddress?.trim();
+
+        if (!address) {
+          console.log("Pedido ignorado: endereço vazio.");
+          continue;
+        }
+
+        try {
+          const results = await Location.geocodeAsync(`${address}, Brasil`);
+
+          console.log("Resultado da geocodificação:", results);
+
+          if (results.length > 0) {
+            markers.push({
+              id: donation.id,
+              title: donation.title,
+              description: donation.description,
+              latitude: results[0].latitude,
+              longitude: results[0].longitude,
+            });
+
+            console.log("Marcador criado para o pedido:", donation.id);
+          } else {
+            console.log("Endereço não localizado:", address);
+          }
+        } catch (error) {
+          console.log(`Erro ao localizar pedido ${donation.id}:`, error);
+        }
+      }
+
+      if (!cancelled) {
+        console.log("Total de marcadores criados:", markers.length);
+        setHelpRequestMarkers(markers);
+      }
+    }
+
+    loadHelpRequestMarkers();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [donations]);
 
   async function handleSearch() {
     const value = searchText.trim();
@@ -88,7 +215,7 @@ export default function HomeScreen() {
       let longitude: number;
       let markerTitle = value;
 
-      // 1. Pesquisa por latitude e longitude
+      // Pesquisa por latitude e longitude
       const coordinatesMatch = value.match(
         /^\s*(-?\d+(?:\.\d+)?)\s*[,;]\s*(-?\d+(?:\.\d+)?)\s*$/,
       );
@@ -110,7 +237,7 @@ export default function HomeScreen() {
       } else {
         let address = value;
 
-        // 2. Pesquisa por CEP
+        // Pesquisa por CEP
         const cep = value.replace(/\D/g, "");
 
         if (/^\d{8}$/.test(cep)) {
@@ -139,15 +266,7 @@ export default function HomeScreen() {
           markerTitle = address || `CEP ${cep}`;
         }
 
-        // 3. Pesquisa por endereço ou endereço obtido pelo CEP
-        const { status } = await Location.requestForegroundPermissionsAsync();
-
-        if (status !== "granted") {
-          throw new Error(
-            "Permita o acesso à localização para pesquisar endereços.",
-          );
-        }
-
+        // Converte endereço em coordenadas
         const results = await Location.geocodeAsync(address);
 
         if (results.length === 0) {
@@ -158,7 +277,6 @@ export default function HomeScreen() {
         longitude = results[0].longitude;
       }
 
-      // Atualiza a região do mapa
       setRegion({
         latitude,
         longitude,
@@ -166,7 +284,6 @@ export default function HomeScreen() {
         longitudeDelta: 0.012,
       });
 
-      // Adiciona marcador do local pesquisado
       setSearchMarker({
         latitude,
         longitude,
@@ -216,12 +333,23 @@ export default function HomeScreen() {
   }
 
   function handleDonate() {
-     router.push("/OrgScreens/FindRequests");
+    router.push("/OrgScreens/FindRequests");
   }
 
   function handleRequestHelp() {
     router.push("/UserScreens/RequestHelpScreen");
   }
+
+  async function handleLogout() {
+    try {
+      await clearSession();
+      router.replace("/");
+    } catch {
+      Alert.alert("Erro", "Não foi possível sair da conta.");
+    }
+  }
+
+  const loadingMapData = loadingPoints || loadingDonations;
 
   return (
     <View style={styles.container}>
@@ -237,6 +365,7 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {/* Pesquisa */}
       <View style={styles.searchContainer}>
         <Ionicons name="search-outline" size={21} color="#718078" />
 
@@ -274,8 +403,8 @@ export default function HomeScreen() {
           showsCompass
           loadingEnabled
         >
-          {/* Marcadores das instituições */}
-          {institutions.map((institution) => (
+          {/* Instituições */}
+          {institutionMarkers.map((institution) => (
             <Marker
               key={`institution-${institution.id}`}
               coordinate={{
@@ -283,25 +412,26 @@ export default function HomeScreen() {
                 longitude: institution.longitude,
               }}
               title={institution.name}
-              description={institution.description}
+              description={institution.address}
               pinColor="#16A36A"
             />
           ))}
 
-          {/* Marcadores dos pedidos de ajuda */}
-          {helpRequests.map((request) => (
+          {/* Pedidos de ajuda */}
+          {helpRequestMarkers.map((request) => (
             <Marker
               key={`request-${request.id}`}
               coordinate={{
                 latitude: request.latitude,
                 longitude: request.longitude,
               }}
-              title={request.name}
+              title={request.title}
               description={request.description}
               pinColor="#F59E0B"
             />
           ))}
 
+          {/* Local pesquisado */}
           {searchMarker && (
             <Marker
               coordinate={{
@@ -315,15 +445,19 @@ export default function HomeScreen() {
           )}
         </MapView>
 
-        {/* Carregamento da localização */}
-        {loadingLocation && (
+        {/* Carregamento */}
+        {(loadingLocation || loadingMapData) && (
           <View style={styles.locationLoading}>
             <ActivityIndicator size="small" color="#16A36A" />
-            <Text style={styles.loadingText}>Localizando você...</Text>
+            <Text style={styles.loadingText}>
+              {loadingLocation
+                ? "Localizando você..."
+                : "Carregando dados do mapa..."}
+            </Text>
           </View>
         )}
 
-        {/* Legenda do mapa */}
+        {/* Legenda */}
         <View style={styles.legend}>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, styles.institutionDot]} />
@@ -336,6 +470,19 @@ export default function HomeScreen() {
           </View>
         </View>
       </View>
+
+      {/* Avisos de carregamento e erro */}
+      {errorPoints && (
+        <Text style={styles.errorText}>
+          Não foi possível carregar as instituições.
+        </Text>
+      )}
+
+      {errorDonations && (
+        <Text style={styles.errorText}>
+          Não foi possível carregar os pedidos de ajuda.
+        </Text>
+      )}
 
       {/* Ações principais */}
       <View style={styles.actionsContainer}>
@@ -361,19 +508,27 @@ export default function HomeScreen() {
             <Ionicons name="hand-left-outline" size={25} color="#16A36A" />
             <Text style={styles.helpButtonText}>Solicitar ajuda</Text>
           </TouchableOpacity>
-
-          
         </View>
+
         <TouchableOpacity
-            style={styles.trackButton}
-            onPress={() => router.push("/UserScreens/UserRequests")}
-          >
-            <Ionicons name="clipboard-outline" size={21} color="#16A36A" />
+          style={styles.trackButton}
+          onPress={() => router.push("/UserScreens/UserRequests")}
+        >
+          <Ionicons name="clipboard-outline" size={21} color="#16A36A" />
 
-            <Text style={styles.trackButtonText}>Acompanhar meus pedidos</Text>
+          <Text style={styles.trackButtonText}>Acompanhar meus pedidos</Text>
 
-            <Ionicons name="chevron-forward" size={19} color="#16A36A" />
-          </TouchableOpacity>
+          <Ionicons name="chevron-forward" size={19} color="#16A36A" />
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={handleLogout}
+          activeOpacity={0.75}
+        >
+          <Ionicons name="log-out-outline" size={21} color="#DC2626" />
+          <Text style={styles.logoutButtonText}>Sair da conta</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -514,7 +669,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
   },
-
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -529,14 +683,12 @@ const styles = StyleSheet.create({
     borderColor: "#E5EDE8",
     gap: 10,
   },
-
   searchInput: {
     flex: 1,
     fontSize: 13,
     color: "#173D2E",
     height: "100%",
   },
-
   searchButton: {
     width: 42,
     height: 42,
@@ -546,20 +698,42 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   trackButton: {
-  flexDirection: "row",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: 10,
-  backgroundColor: "#E5F5EC",
-  borderRadius: 15,
-  padding: 16,
-  marginTop: 12,
-},
-
-trackButtonText: {
-  color: "#16A36A",
-  fontSize: 13,
-  fontWeight: "700",
-  flex: 1,
-},
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#E5F5EC",
+    borderRadius: 15,
+    padding: 16,
+    marginTop: 12,
+  },
+  trackButtonText: {
+    color: "#16A36A",
+    fontSize: 13,
+    fontWeight: "700",
+    flex: 1,
+  },
+  logoutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#FEE2E2",
+    padding: 15,
+    borderRadius: 14,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  logoutButtonText: {
+    color: "#DC2626",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  errorText: {
+    color: "#DC2626",
+    fontSize: 12,
+    textAlign: "center",
+    marginTop: 5,
+  },
 });

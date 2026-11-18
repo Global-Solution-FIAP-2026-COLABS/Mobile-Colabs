@@ -1,4 +1,3 @@
-
 import {
   View,
   Text,
@@ -8,6 +7,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { Alert } from "react-native";
+import { clearSession } from "../../api/api";
 
 const menuItems = [
   {
@@ -39,6 +40,15 @@ export default function HomeInstitutionScreen() {
     router.push(route as any);
   }
 
+  async function handleLogout() {
+    try {
+      await clearSession();
+      router.replace("/");
+    } catch {
+      Alert.alert("Erro", "Não foi possível sair da conta.");
+    }
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView
@@ -56,11 +66,7 @@ export default function HomeInstitutionScreen() {
           </View>
 
           <TouchableOpacity style={styles.profileButton}>
-            <Ionicons
-              name="business-outline"
-              size={24}
-              color="#16A36A"
-            />
+            <Ionicons name="business-outline" size={24} color="#16A36A" />
           </TouchableOpacity>
         </View>
 
@@ -68,45 +74,33 @@ export default function HomeInstitutionScreen() {
         <View style={styles.summaryCard}>
           <View style={styles.summaryHeader}>
             <View>
-              <Text style={styles.summaryTitle}>
-                Resumo das atividades
-              </Text>
+              <Text style={styles.summaryTitle}>Resumo das atividades</Text>
               <Text style={styles.summarySubtitle}>
                 Acompanhe sua atuação na plataforma.
               </Text>
             </View>
 
-            <Ionicons
-              name="stats-chart-outline"
-              size={25}
-              color="#FFFFFF"
-            />
+            <Ionicons name="stats-chart-outline" size={25} color="#FFFFFF" />
           </View>
 
           <View style={styles.statsContainer}>
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>12</Text>
-              <Text style={styles.statLabel}>
-                Pedidos disponíveis
-              </Text>
+              <Text style={styles.statLabel}>Pedidos disponíveis</Text>
             </View>
 
             <View style={styles.statDivider} />
 
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>4</Text>
-              <Text style={styles.statLabel}>
-                Em atendimento
-              </Text>
+              <Text style={styles.statLabel}>Em atendimento</Text>
             </View>
 
             <View style={styles.statDivider} />
 
             <View style={styles.statItem}>
               <Text style={styles.statNumber}>8</Text>
-              <Text style={styles.statLabel}>
-                Doações realizadas
-              </Text>
+              <Text style={styles.statLabel}>Doações realizadas</Text>
             </View>
           </View>
         </View>
@@ -135,28 +129,26 @@ export default function HomeInstitutionScreen() {
                   { backgroundColor: `${item.color}18` },
                 ]}
               >
-                <Ionicons
-                  name={item.icon}
-                  size={25}
-                  color={item.color}
-                />
+                <Ionicons name={item.icon} size={25} color={item.color} />
               </View>
 
               <View style={styles.menuInfo}>
                 <Text style={styles.menuTitle}>{item.title}</Text>
-                <Text style={styles.menuDescription}>
-                  {item.description}
-                </Text>
+                <Text style={styles.menuDescription}>{item.description}</Text>
               </View>
 
-              <Ionicons
-                name="chevron-forward"
-                size={20}
-                color="#AAB5AE"
-              />
+              <Ionicons name="chevron-forward" size={20} color="#AAB5AE" />
             </TouchableOpacity>
           ))}
         </View>
+        <TouchableOpacity
+          style={styles.logoutButton}
+          onPress={handleLogout}
+          activeOpacity={0.75}
+        >
+          <Ionicons name="log-out-outline" size={21} color="#DC2626" />
+          <Text style={styles.logoutButtonText}>Sair da conta</Text>
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -363,5 +355,22 @@ const styles = StyleSheet.create({
     fontSize: 10,
     textAlign: "center",
     marginTop: 25,
+  },
+  logoutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#FEE2E2",
+    padding: 15,
+    borderRadius: 14,
+    marginTop: 25,
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  logoutButtonText: {
+    color: "#DC2626",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

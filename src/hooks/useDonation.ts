@@ -29,6 +29,9 @@ export function useCommunityDonations() {
   return useQuery({
     queryKey: ["communityDonations"],
     queryFn: getCommunityDonations,
+    staleTime: 0,
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
 }
 
