@@ -1,16 +1,14 @@
-
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   createDonation,
-  getMyDonations,
-  getCommunityDonations,
   fulfillDonation,
-} from "../api/donationApi";
+  getCommunityDonations,
+  getMyDonations,
+  completeDonation,
+  reviewDonation,
+  type DonationReviewRequest,
+} from "../services/donationService";
 
 export function useCreateDonation() {
   return useMutation({
@@ -47,6 +45,47 @@ export function useFulfillDonation() {
 
       queryClient.invalidateQueries({
         queryKey: ["myDonations"],
+      });
+    },
+  });
+}
+
+export function useCompleteDonation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: completeDonation,
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["myDonations"],
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: ["communityDonations"],
+      });
+    },
+  });
+}
+
+export function useReviewDonation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      data,
+    }: {
+      id: number;
+      data: DonationReviewRequest;
+    }) => reviewDonation(id, data),
+
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["myDonations"],
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: ["communityDonations"],
       });
     },
   });

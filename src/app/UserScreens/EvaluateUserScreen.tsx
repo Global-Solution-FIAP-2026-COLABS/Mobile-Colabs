@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import {
   View,
@@ -8,46 +7,58 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  ActivityIndicator
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
+import { useReviewDonation } from "../../hooks/useDonation";
 
 export default function EvaluateScreen() {
-  const { requestId, institution, category } =
-    useLocalSearchParams<{
-      requestId: string;
-      institution: string;
-      category: string;
-    }>();
+  const { requestId, institution, category } = useLocalSearchParams<{
+    requestId: string;
+    institution: string;
+    category: string;
+  }>();
 
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
 
-  function handleSubmit() {
-    if (rating === 0) {
-      Alert.alert("Avaliação", "Selecione uma nota de 1 a 5 estrelas.");
+  const reviewMutation = useReviewDonation();
+
+  async function handleSubmit() {
+    const id = Number(requestId);
+
+    if (!requestId || !Number.isInteger(id) || id <= 0) {
+      Alert.alert("Erro", "Pedido não identificado.");
       return;
     }
 
-    const evaluationData = {
-      requestId,
-      rating,
-      comment: comment.trim(),
-    };
-
-    // Temporário: futuramente enviar para a API.
-    console.log("Avaliação:", evaluationData);
-
-    Alert.alert(
-      "Avaliação registrada!",
-      "Obrigado por compartilhar sua experiência. Sua opinião é importante para melhorar os atendimentos.",
-      [
-        {
-          text: "Voltar aos meus pedidos",
-          onPress: () => router.back(),
+    try {
+      await reviewMutation.mutateAsync({
+        id,
+        data: {
+          reviewNotes: comment.trim(),
         },
-      ]
-    );
+      });
+
+      Alert.alert(
+        "Avaliação registrada!",
+        "Obrigado por compartilhar sua experiência.",
+        [
+          {
+            text: "Voltar aos meus pedidos",
+            onPress: () => router.back(),
+          },
+        ],
+      );
+    } catch (error) {
+      Alert.alert(
+        "Erro",
+        error instanceof Error
+          ? error.message
+          : "Não foi possível enviar sua avaliação.",
+      );
+    }
   }
 
   return (
@@ -83,31 +94,21 @@ export default function EvaluateScreen() {
         {/* Ícone de avaliação */}
         <View style={styles.mainIconContainer}>
           <View style={styles.mainIcon}>
-            <Ionicons
-              name="heart-circle-outline"
-              size={55}
-              color="#16A36A"
-            />
+            <Ionicons name="heart-circle-outline" size={55} color="#16A36A" />
           </View>
 
-          <Text style={styles.mainTitle}>
-            Como foi seu atendimento?
-          </Text>
+          <Text style={styles.mainTitle}>Como foi seu atendimento?</Text>
 
           <Text style={styles.mainDescription}>
-            Sua avaliação ajuda outras pessoas e contribui para
-            melhorar os serviços das instituições.
+            Sua avaliação ajuda outras pessoas e contribui para melhorar os
+            serviços das instituições.
           </Text>
         </View>
 
         {/* Informações do pedido */}
         <View style={styles.requestCard}>
           <View style={styles.requestRow}>
-            <Ionicons
-              name="clipboard-outline"
-              size={20}
-              color="#16A36A"
-            />
+            <Ionicons name="clipboard-outline" size={20} color="#16A36A" />
 
             <View style={styles.requestInfo}>
               <Text style={styles.label}>Pedido</Text>
@@ -118,11 +119,7 @@ export default function EvaluateScreen() {
           <View style={styles.requestDivider} />
 
           <View style={styles.requestRow}>
-            <Ionicons
-              name="business-outline"
-              size={20}
-              color="#16A36A"
-            />
+            <Ionicons name="business-outline" size={20} color="#16A36A" />
 
             <View style={styles.requestInfo}>
               <Text style={styles.label}>Instituição</Text>
@@ -135,52 +132,13 @@ export default function EvaluateScreen() {
           <View style={styles.requestDivider} />
 
           <View style={styles.requestRow}>
-            <Ionicons
-              name="pricetag-outline"
-              size={20}
-              color="#16A36A"
-            />
+            <Ionicons name="pricetag-outline" size={20} color="#16A36A" />
 
             <View style={styles.requestInfo}>
               <Text style={styles.label}>Categoria</Text>
-              <Text style={styles.value}>
-                {category || "Não informada"}
-              </Text>
+              <Text style={styles.value}>{category || "Não informada"}</Text>
             </View>
           </View>
-        </View>
-
-        {/* Nota */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            Qual nota você daria?
-          </Text>
-
-          <Text style={styles.helperText}>
-            Selecione de 1 a 5 estrelas.
-          </Text>
-
-          <View style={styles.starsContainer}>
-            {[1, 2, 3, 4, 5].map((star) => (
-              <TouchableOpacity
-                key={star}
-                onPress={() => setRating(star)}
-                activeOpacity={0.7}
-              >
-                <Ionicons
-                  name={rating >= star ? "star" : "star-outline"}
-                  size={39}
-                  color={rating >= star ? "#F5B942" : "#C9D2CC"}
-                />
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <Text style={styles.ratingText}>
-            {rating === 0
-              ? "Nenhuma nota selecionada"
-              : `${rating} de 5 estrelas`}
-          </Text>
         </View>
 
         {/* Comentário */}
@@ -204,21 +162,24 @@ export default function EvaluateScreen() {
             maxLength={500}
           />
 
-          <Text style={styles.characterCount}>
-            {comment.length}/500
-          </Text>
+          <Text style={styles.characterCount}>{comment.length}/500</Text>
         </View>
 
-        {/* Enviar avaliação */}
+      
         <TouchableOpacity
           style={styles.submitButton}
           onPress={handleSubmit}
           activeOpacity={0.85}
+          disabled={reviewMutation.isPending}
         >
-          <Ionicons name="star-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.submitButtonText}>
-            Enviar avaliação
-          </Text>
+          {reviewMutation.isPending ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <>
+              <Ionicons name="send-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.submitButtonText}>Enviar avaliação</Text>
+            </>
+          )}
         </TouchableOpacity>
 
         <Text style={styles.footerText}>

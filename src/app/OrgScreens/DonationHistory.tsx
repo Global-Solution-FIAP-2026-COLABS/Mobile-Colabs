@@ -1,14 +1,17 @@
 
-import React, { useMemo, useState } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
+import { router } from "expo-router";
+
+import { useMyDonations } from "../../hooks/useDonation";
 
 type DonationItem = {
   name: string;
@@ -24,96 +27,65 @@ type Donation = {
   date: string;
 };
 
-// Dados fictícios para demonstrar o histórico
-const initialDonations: Donation[] = [
-  {
-    id: "101",
-    requester: "Maria Oliveira",
-    category: "Alimentos",
-    items: [
-      { name: "Arroz", quantity: 5 },
-      { name: "Feijão", quantity: 3 },
-    ],
-    status: "Concluída",
-    date: "10/11/2026",
-  },
-  {
-    id: "102",
-    requester: "João Santos",
-    category: "Roupas",
-    items: [
-      { name: "Camisetas", quantity: 10 },
-    ],
-    status: "Em andamento",
-    date: "12/11/2026",
-  },
-];
-
 type Filter = "Todas" | "Em andamento" | "Concluídas";
 
 export default function DonationHistory() {
-  const params = useLocalSearchParams<{
-    requestId?: string;
-    user?: string;
-    category?: string;
-    items?: string;
-    status?: string;
-    completedAt?: string;
-  }>();
-
   const [filter, setFilter] = useState<Filter>("Todas");
 
-  // Adiciona a doação recebida pela navegação à lista
-  const donations = useMemo(() => {
-    if (!params.requestId) return initialDonations;
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    isRefetching,
+  } = useMyDonations();
 
-    let receivedItems: DonationItem[] = [];
-
-    try {
-      receivedItems = JSON.parse(params.items || "[]");
-    } catch {
-      receivedItems = [];
-    }
-
-    const receivedDonation: Donation = {
-      id: params.requestId,
-      requester: params.user || "Solicitante",
-      category: params.category || "Não informada",
-      items: receivedItems,
+  // Filtra somente pedidos de ajuda vinculados à instituição.
+  // Exibe pedidos em andamento e pedidos entregues.
+  const donations: Donation[] = (data?.content ?? [])
+    .filter(
+      (donation) =>
+        donation.type === "HELP_REQUEST" &&
+        donation.collectionPointId != null &&
+        (donation.status === "IN_PROGRESS" ||
+          donation.status === "DELIVERED")
+    )
+    .map((donation) => ({
+      id: String(donation.id),
+      requester: donation.citizenName || "Solicitante",
+      category:
+        donation.items?.[0]?.categoryLabel ||
+        donation.items?.[0]?.category ||
+        "Não informada",
+      items: (donation.items ?? []).map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+      })),
       status:
-        params.status === "Concluída"
+        donation.status === "DELIVERED"
           ? "Concluída"
           : "Em andamento",
-      date: params.completedAt
-        ? new Date(params.completedAt).toLocaleDateString("pt-BR")
-        : new Date().toLocaleDateString("pt-BR"),
-    };
-
-    return [
-      receivedDonation,
-      ...initialDonations.filter(
-        (donation) => donation.id !== receivedDonation.id
-      ),
-    ];
-  }, [
-    params.requestId,
-    params.user,
-    params.category,
-    params.items,
-    params.status,
-    params.completedAt,
-  ]);
+      date: donation.createdAt
+        ? new Date(donation.createdAt).toLocaleDateString("pt-BR")
+        : "Data não informada",
+    }));
 
   const filteredDonations = donations.filter((donation) => {
     if (filter === "Todas") return true;
+
     if (filter === "Concluídas") {
       return donation.status === "Concluída";
     }
+
     return donation.status === "Em andamento";
   });
 
   const completedCount = donations.filter(
     (donation) => donation.status === "Concluída"
+  ).length;
+
+  const inProgressCount = donations.filter(
+    (donation) => donation.status === "Em andamento"
   ).length;
 
   function handleBack() {
@@ -122,6 +94,53 @@ export default function DonationHistory() {
     } else {
       router.replace("/OrgScreens/HomeInstitution" as any);
     }
+  }
+
+  if (isLoading) {
+    return (
+      <View style={styles.stateContainer}>
+        <ActivityIndicator size="large" color="#16A36A" />
+        <Text style={styles.stateText}>
+          Carregando histórico de doações...
+        </Text>
+      </View>
+    );
+  }
+
+  if (isError) {
+    return (
+      <View style={styles.stateContainer}>
+        <Ionicons
+          name="cloud-offline-outline"
+          size={45}
+          color="#A0ADA5"
+        />
+
+        <Text style={styles.emptyTitle}>
+          Não foi possível carregar o histórico
+        </Text>
+
+        <Text style={styles.emptyText}>
+          Verifique sua conexão e tente novamente.
+        </Text>
+
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => refetch()}
+        >
+          <Text style={styles.retryButtonText}>
+            Tentar novamente
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.backLink}
+          onPress={handleBack}
+        >
+          <Text style={styles.backLinkText}>Voltar</Text>
+        </TouchableOpacity>
+      </View>
+    );
   }
 
   return (
@@ -135,7 +154,7 @@ export default function DonationHistory() {
           <Ionicons name="arrow-back" size={23} color="#173D2E" />
         </TouchableOpacity>
 
-        <View>
+        <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>
             Histórico de doações
           </Text>
@@ -143,6 +162,18 @@ export default function DonationHistory() {
             Acompanhe suas entregas
           </Text>
         </View>
+
+        <TouchableOpacity
+          style={styles.refreshButton}
+          onPress={() => refetch()}
+          disabled={isRefetching}
+        >
+          <Ionicons
+            name="refresh-outline"
+            size={22}
+            color="#173D2E"
+          />
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -157,11 +188,29 @@ export default function DonationHistory() {
               size={25}
               color="#16A36A"
             />
+
             <Text style={styles.summaryNumber}>
               {donations.length}
             </Text>
+
             <Text style={styles.summaryLabel}>
-              Total de doações
+              Total de pedidos
+            </Text>
+          </View>
+
+          <View style={styles.summaryCard}>
+            <Ionicons
+              name="time-outline"
+              size={25}
+              color="#B7791F"
+            />
+
+            <Text style={styles.summaryNumber}>
+              {inProgressCount}
+            </Text>
+
+            <Text style={styles.summaryLabel}>
+              Em andamento
             </Text>
           </View>
 
@@ -171,9 +220,11 @@ export default function DonationHistory() {
               size={25}
               color="#16A36A"
             />
+
             <Text style={styles.summaryNumber}>
               {completedCount}
             </Text>
+
             <Text style={styles.summaryLabel}>
               Concluídas
             </Text>
@@ -205,19 +256,26 @@ export default function DonationHistory() {
           )}
         </View>
 
-        {/* Lista de doações */}
-        <Text style={styles.sectionTitle}>
-          Suas doações
-        </Text>
+        {/* Lista */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            Pedidos da instituição
+          </Text>
+
+          {isRefetching && (
+            <ActivityIndicator size="small" color="#16A36A" />
+          )}
+        </View>
 
         {filteredDonations.length > 0 ? (
           filteredDonations.map((donation) => (
             <View key={donation.id} style={styles.donationCard}>
               <View style={styles.cardHeader}>
-                <View>
+                <View style={styles.requesterContainer}>
                   <Text style={styles.donationId}>
-                    Doação #{donation.id}
+                    Pedido #{donation.id}
                   </Text>
+
                   <Text style={styles.requester}>
                     {donation.requester}
                   </Text>
@@ -252,6 +310,7 @@ export default function DonationHistory() {
                   size={17}
                   color="#718078"
                 />
+
                 <Text style={styles.infoText}>
                   {donation.category}
                 </Text>
@@ -263,6 +322,7 @@ export default function DonationHistory() {
                   size={17}
                   color="#718078"
                 />
+
                 <Text style={styles.infoText}>
                   {donation.date}
                 </Text>
@@ -270,17 +330,23 @@ export default function DonationHistory() {
 
               <View style={styles.itemsContainer}>
                 <Text style={styles.itemsTitle}>
-                  Itens doados
+                  Itens solicitados
                 </Text>
 
-                {donation.items.map((item, index) => (
-                  <Text
-                    key={`${item.name}-${index}`}
-                    style={styles.itemText}
-                  >
-                    • {item.name} — {item.quantity} unidade(s)
+                {donation.items.length > 0 ? (
+                  donation.items.map((item, index) => (
+                    <Text
+                      key={`${item.name}-${index}`}
+                      style={styles.itemText}
+                    >
+                      • {item.name} — {item.quantity} unidade(s)
+                    </Text>
+                  ))
+                ) : (
+                  <Text style={styles.emptyItemsText}>
+                    Nenhum item informado.
                   </Text>
-                ))}
+                )}
               </View>
             </View>
           ))
@@ -291,11 +357,13 @@ export default function DonationHistory() {
               size={45}
               color="#A0ADA5"
             />
+
             <Text style={styles.emptyTitle}>
-              Nenhuma doação encontrada
+              Nenhum pedido encontrado
             </Text>
+
             <Text style={styles.emptyText}>
-              Não existem doações nesta categoria.
+              Não existem pedidos nesta categoria vinculados à instituição.
             </Text>
           </View>
         )}
@@ -328,6 +396,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 13,
   },
+  headerTextContainer: {
+    flex: 1,
+  },
+  refreshButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: "#E5F5EC",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
+  },
   headerTitle: {
     fontSize: 20,
     fontWeight: "700",
@@ -344,25 +424,25 @@ const styles = StyleSheet.create({
   },
   summaryContainer: {
     flexDirection: "row",
-    gap: 12,
+    gap: 10,
     marginBottom: 22,
   },
   summaryCard: {
     flex: 1,
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    padding: 16,
+    padding: 12,
     borderWidth: 1,
     borderColor: "#E5EDE8",
   },
   summaryNumber: {
-    fontSize: 25,
+    fontSize: 24,
     fontWeight: "700",
     color: "#173D2E",
     marginTop: 10,
   },
   summaryLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#718078",
     marginTop: 3,
   },
@@ -392,11 +472,16 @@ const styles = StyleSheet.create({
   activeFilterText: {
     color: "#FFFFFF",
   },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 14,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: "#173D2E",
-    marginBottom: 14,
   },
   donationCard: {
     backgroundColor: "#FFFFFF",
@@ -411,6 +496,9 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
     gap: 8,
+  },
+  requesterContainer: {
+    flex: 1,
   },
   donationId: {
     fontSize: 12,
@@ -475,20 +563,58 @@ const styles = StyleSheet.create({
     color: "#52635A",
     marginTop: 4,
   },
+  emptyItemsText: {
+    fontSize: 12,
+    color: "#718078",
+  },
   emptyContainer: {
     alignItems: "center",
     padding: 35,
+  },
+  stateContainer: {
+    flex: 1,
+    backgroundColor: "#F8FAFC",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 30,
+  },
+  stateText: {
+    fontSize: 13,
+    color: "#718078",
+    marginTop: 12,
   },
   emptyTitle: {
     fontSize: 15,
     fontWeight: "700",
     color: "#173D2E",
     marginTop: 12,
+    textAlign: "center",
   },
   emptyText: {
     fontSize: 12,
     color: "#718078",
     marginTop: 5,
     textAlign: "center",
+  },
+  retryButton: {
+    backgroundColor: "#173D2E",
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    borderRadius: 10,
+    marginTop: 18,
+  },
+  retryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  backLink: {
+    marginTop: 15,
+    padding: 8,
+  },
+  backLinkText: {
+    color: "#52635A",
+    fontSize: 13,
+    fontWeight: "600",
   },
 });

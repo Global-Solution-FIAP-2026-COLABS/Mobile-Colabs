@@ -68,7 +68,9 @@ export interface DonationResponse {
   citizenAddress: string;
   collectionPointId: number | null;
   collectionPointName: string | null;
+  collectionPointAddress: string | null;
   fulfilledByCitizenId: number | null;
   fulfilledByCitizenName: string | null;
   items: DonationItemResponse[];
+  
 }

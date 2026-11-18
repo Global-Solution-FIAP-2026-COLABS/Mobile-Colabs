@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -7,17 +7,14 @@ import {
   ScrollView,
   Alert,
   Linking,
+  ActivityIndicator,
 } from "react-native";
 
 import MapView, { Marker, Region } from "react-native-maps";
+import * as Location from "expo-location";
+
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-
-// Coordenadas fictícias da instituição
-const institutionLocation = {
-  latitude: -23.5505,
-  longitude: -46.6333,
-};
 
 type Coordinates = {
   latitude: number;
@@ -34,43 +31,10 @@ type Delivery = {
   requester: string;
   category: string;
   address: string;
-  phone: string;
+  institutionAddress: string;
   description: string;
-  destination: Coordinates;
   items: DonationItem[];
 };
-
-// Calcula o tempo estimado pela distância em linha reta
-function calculateEstimatedTime(
-  origin: Coordinates,
-  destination: Coordinates,
-): number {
-  const toRadians = (degrees: number) => degrees * (Math.PI / 180);
-
-  const earthRadius = 6371;
-
-  const latitudeDifference = toRadians(destination.latitude - origin.latitude);
-
-  const longitudeDifference = toRadians(
-    destination.longitude - origin.longitude,
-  );
-
-  const a =
-    Math.sin(latitudeDifference / 2) ** 2 +
-    Math.cos(toRadians(origin.latitude)) *
-      Math.cos(toRadians(destination.latitude)) *
-      Math.sin(longitudeDifference / 2) ** 2;
-
-  const distance = earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-  // Estimativa considerando desvios das ruas
-  const estimatedRoadDistance = distance * 1.3;
-
-  // Velocidade média urbana hipotética
-  const averageSpeed = 25;
-
-  return Math.max(1, Math.ceil((estimatedRoadDistance / averageSpeed) * 60));
-}
 
 export default function DeliverDonation() {
   const params = useLocalSearchParams<{
@@ -81,9 +45,9 @@ export default function DeliverDonation() {
     donorType: string;
     items: string;
     description: string;
+    citizenAddress: string;
+    institutionAddress: string;
   }>();
-
-  
 
   const [selectedDelivery] = useState<Delivery | null>(() => {
     try {
@@ -93,31 +57,122 @@ export default function DeliverDonation() {
         id: Number(params.requestId),
         requester: params.user || "Solicitante",
         category: params.category || "Não informada",
-        address: "Endereço do solicitante não informado",
-        phone: "Telefone não informado",
+        address: params.citizenAddress || "",
+        institutionAddress: params.institutionAddress || "",
         description: params.description || "",
-        destination: {
-          latitude: -23.558,
-          longitude: -46.64,
-        },
         items: donationItems.map((item) => ({
           name: item.name,
           quantity: Number(item.quantity),
         })),
       };
-    } catch {
+    } catch (error) {
+      console.log("Erro ao interpretar os dados da doação:", error);
       return null;
     }
   });
 
   const mapRef = useRef<MapView>(null);
 
-  const initialRegion: Region = {
-    latitude: institutionLocation.latitude,
-    longitude: institutionLocation.longitude,
-    latitudeDelta: 0.04,
-    longitudeDelta: 0.04,
-  };
+  const [citizenLocation, setCitizenLocation] = useState<Coordinates | null>(
+    null,
+  );
+
+  const [institutionLocation, setInstitutionLocation] =
+    useState<Coordinates | null>(null);
+
+  const [loadingMap, setLoadingMap] = useState(true);
+  const [mapReady, setMapReady] = useState(false);
+
+  // Localiza os endereços recebidos do backend.
+  useEffect(() => {
+    let cancelled = false;
+
+    async function geocodeAddress(
+      address: string,
+    ): Promise<Coordinates | null> {
+      if (!address.trim()) {
+        return null;
+      }
+
+      try {
+        const results = await Location.geocodeAsync(address);
+
+        if (results.length === 0) {
+          return null;
+        }
+
+        return {
+          latitude: results[0].latitude,
+          longitude: results[0].longitude,
+        };
+      } catch (error) {
+        console.log(`Erro ao localizar endereço "${address}":`, error);
+        return null;
+      }
+    }
+
+    async function loadLocations() {
+      setLoadingMap(true);
+      setCitizenLocation(null);
+      setInstitutionLocation(null);
+
+      if (!selectedDelivery) {
+        setLoadingMap(false);
+        return;
+      }
+
+      const [citizenCoordinates, institutionCoordinates] = await Promise.all([
+        geocodeAddress(selectedDelivery.address),
+        geocodeAddress(selectedDelivery.institutionAddress),
+      ]);
+
+      if (cancelled) return;
+
+      setCitizenLocation(citizenCoordinates);
+      setInstitutionLocation(institutionCoordinates);
+      setLoadingMap(false);
+    }
+
+    loadLocations();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDelivery]);
+
+  // Ajusta o mapa para exibir os locais encontrados.
+  const adjustMap = useCallback(() => {
+    if (!mapReady) return;
+
+    const coordinates = [institutionLocation, citizenLocation].filter(
+      (location): location is Coordinates => location !== null,
+    );
+
+    if (coordinates.length === 2) {
+      mapRef.current?.fitToCoordinates(coordinates, {
+        edgePadding: {
+          top: 55,
+          right: 55,
+          bottom: 55,
+          left: 55,
+        },
+        animated: true,
+      });
+    } else if (coordinates.length === 1) {
+      mapRef.current?.animateToRegion(
+        {
+          ...coordinates[0],
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        },
+        800,
+      );
+    }
+  }, [mapReady, institutionLocation, citizenLocation]);
+
+  useEffect(() => {
+    adjustMap();
+  }, [adjustMap]);
 
   function handleBack() {
     if (router.canGoBack()) {
@@ -127,15 +182,26 @@ export default function DeliverDonation() {
     }
   }
 
+  // Abre o Google Maps com os endereços reais.
   function openGoogleMaps() {
     if (!selectedDelivery) return;
 
-    const { latitude, longitude } = selectedDelivery.destination;
+    if (!selectedDelivery.institutionAddress || !selectedDelivery.address) {
+      Alert.alert(
+        "Endereço não disponível",
+        "Não foi possível encontrar o endereço da instituição ou do solicitante.",
+      );
+      return;
+    }
+
+    const origin = encodeURIComponent(selectedDelivery.institutionAddress);
+
+    const destination = encodeURIComponent(selectedDelivery.address);
 
     const url =
       "https://www.google.com/maps/dir/?api=1" +
-      `&origin=${institutionLocation.latitude},${institutionLocation.longitude}` +
-      `&destination=${latitude},${longitude}` +
+      `&origin=${origin}` +
+      `&destination=${destination}` +
       "&travelmode=driving";
 
     Linking.openURL(url).catch(() => {
@@ -143,7 +209,7 @@ export default function DeliverDonation() {
     });
   }
 
-  // Verifica se os dados da doação foram recebidos
+  // Verifica se os dados da doação foram recebidos.
   if (!selectedDelivery) {
     return (
       <View style={styles.container}>
@@ -165,11 +231,6 @@ export default function DeliverDonation() {
     );
   }
 
-  const estimatedTime = calculateEstimatedTime(
-    institutionLocation,
-    selectedDelivery.destination,
-  );
-
   function handleCompleteDelivery() {
     if (!selectedDelivery) return;
 
@@ -180,7 +241,7 @@ export default function DeliverDonation() {
         user: selectedDelivery.requester,
         category: selectedDelivery.category,
         address: selectedDelivery.address,
-        phone: selectedDelivery.phone,
+        phone: "",
         description: selectedDelivery.description,
         items: JSON.stringify(selectedDelivery.items),
         status: "Concluída",
@@ -188,6 +249,17 @@ export default function DeliverDonation() {
       },
     } as any);
   }
+
+  const mapCenter = institutionLocation || citizenLocation;
+
+  const initialRegion: Region | undefined = mapCenter
+    ? {
+        latitude: mapCenter.latitude,
+        longitude: mapCenter.longitude,
+        latitudeDelta: 0.08,
+        longitudeDelta: 0.08,
+      }
+    : undefined;
 
   return (
     <View style={styles.container}>
@@ -221,13 +293,9 @@ export default function DeliverDonation() {
           <View style={styles.detailRow}>
             <Ionicons name="location-outline" size={18} color="#718078" />
 
-            <Text style={styles.detailText}>{selectedDelivery.address}</Text>
-          </View>
-
-          <View style={styles.detailRow}>
-            <Ionicons name="call-outline" size={18} color="#718078" />
-
-            <Text style={styles.detailText}>{selectedDelivery.phone}</Text>
+            <Text style={styles.detailText}>
+              {selectedDelivery.address || "Endereço não informado"}
+            </Text>
           </View>
         </View>
 
@@ -269,25 +337,49 @@ export default function DeliverDonation() {
           </View>
 
           <View style={styles.mapContainer}>
-            <MapView
-              ref={mapRef}
-              style={styles.map}
-              initialRegion={initialRegion}
-            >
-              <Marker
-                coordinate={institutionLocation}
-                title="Instituição"
-                description="Local de saída"
-                pinColor="#16A36A"
-              />
+            {loadingMap ? (
+              <View style={styles.mapMessage}>
+                <ActivityIndicator size="large" color="#16A36A" />
 
-              <Marker
-                coordinate={selectedDelivery.destination}
-                title={selectedDelivery.requester}
-                description="Endereço de entrega"
-                pinColor="#E58A35"
-              />
-            </MapView>
+                <Text style={styles.detailText}>
+                  Localizando os endereços...
+                </Text>
+              </View>
+            ) : mapCenter && initialRegion ? (
+              <MapView
+                ref={mapRef}
+                style={styles.map}
+                initialRegion={initialRegion}
+                onMapReady={() => setMapReady(true)}
+              >
+                {institutionLocation && (
+                  <Marker
+                    coordinate={institutionLocation}
+                    title="Instituição"
+                    description={selectedDelivery.institutionAddress}
+                    pinColor="#16A36A"
+                  />
+                )}
+
+                {citizenLocation && (
+                  <Marker
+                    coordinate={citizenLocation}
+                    title={selectedDelivery.requester}
+                    description={selectedDelivery.address}
+                    pinColor="#E58A35"
+                  />
+                )}
+              </MapView>
+            ) : (
+              <View style={styles.mapMessage}>
+                <Ionicons name="location-outline" size={38} color="#718078" />
+
+                <Text style={styles.mapMessageText}>
+                  Não foi possível localizar os endereços. Confira se os
+                  endereços estão completos no cadastro.
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Legenda */}
@@ -305,46 +397,23 @@ export default function DeliverDonation() {
             </View>
           </View>
 
-          {/* Tempo estimado */}
-          <View style={styles.timeCard}>
-            <Ionicons name="time-outline" size={29} color="#16A36A" />
-
-            <View style={styles.timeInfo}>
-              <Text style={styles.timeLabel}>
-                Tempo estimado de deslocamento
+          {!loadingMap &&
+            (!institutionLocation || !citizenLocation) &&
+            (institutionLocation || citizenLocation) && (
+              <Text style={styles.mapMessageText}>
+                Não foi possível localizar um dos endereços. Confira os dados do
+                cadastro.
               </Text>
-
-              <Text style={styles.timeValue}>
-                Aproximadamente {estimatedTime} minutos
-              </Text>
-            </View>
-          </View>
-
-          <Text style={styles.estimateDisclaimer}>
-            Estimativa baseada na distância geográfica. Não considera trânsito
-            ou condições das vias.
-          </Text>
+            )}
         </View>
 
         {/* Navegação */}
         <TouchableOpacity
           style={styles.navigationButton}
-          onPress={openGoogleMaps}
+          onPress={() => {router.replace("/OrgScreens/DonationHistory")}}
           activeOpacity={0.85}
         >
-          <Ionicons name="navigate" size={21} color="#FFFFFF" />
-
-          <Text style={styles.navigationButtonText}>Iniciar navegação</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navigationButton}
-          onPress={handleCompleteDelivery}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="checkmark-circle-outline" size={21} color="#FFFFFF" />
-
-          <Text style={styles.navigationButtonText}>Concluir entrega</Text>
+          <Text style={styles.navigationButtonText}>Acompanhar doações</Text>
         </TouchableOpacity>
 
         <Text style={styles.navigationHint}>
@@ -360,6 +429,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8FAFC",
   },
+
   errorContainer: {
     flex: 1,
     alignItems: "center",
@@ -367,6 +437,7 @@ const styles = StyleSheet.create({
     padding: 25,
     gap: 18,
   },
+
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -377,6 +448,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#E5EDE8",
   },
+
   backButton: {
     width: 42,
     height: 42,
@@ -386,26 +458,31 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 13,
   },
+
   headerTitle: {
     fontSize: 21,
     fontWeight: "700",
     color: "#173D2E",
     textAlign: "center",
   },
+
   headerSubtitle: {
     fontSize: 13,
     color: "#718078",
     marginTop: 3,
   },
+
   content: {
     padding: 20,
     paddingBottom: 40,
   },
+
   sectionTitle: {
     fontSize: 17,
     fontWeight: "700",
     color: "#173D2E",
   },
+
   sectionCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
@@ -414,30 +491,35 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#E5EDE8",
   },
+
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 9,
     marginBottom: 15,
   },
+
   requesterName: {
     fontSize: 17,
     fontWeight: "700",
     color: "#173D2E",
     marginBottom: 12,
   },
+
   detailRow: {
     flexDirection: "row",
     alignItems: "flex-start",
     gap: 9,
     marginTop: 9,
   },
+
   detailText: {
     flex: 1,
     fontSize: 13,
     color: "#52635A",
     lineHeight: 19,
   },
+
   itemRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -445,83 +527,83 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#EDF1EE",
   },
+
   itemName: {
     fontSize: 14,
     color: "#52635A",
   },
+
   itemQuantity: {
     fontSize: 13,
     color: "#173D2E",
     fontWeight: "600",
   },
+
   description: {
     color: "#718078",
     fontSize: 12,
     marginTop: 14,
     lineHeight: 18,
   },
+
   mapContainer: {
     height: 260,
     borderRadius: 13,
     overflow: "hidden",
   },
+
   map: {
     flex: 1,
   },
+
+  mapMessage: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    padding: 20,
+    backgroundColor: "#F0F5F1",
+  },
+
+  mapMessageText: {
+    color: "#718078",
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
+    marginTop: 12,
+  },
+
   legend: {
     flexDirection: "row",
     gap: 20,
     marginTop: 14,
   },
+
   legendItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
   },
+
   legendText: {
     fontSize: 12,
     color: "#718078",
   },
+
   originDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
     backgroundColor: "#16A36A",
   },
+
   destinationDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
     backgroundColor: "#E58A35",
   },
-  timeCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#E5F5EC",
-    borderRadius: 12,
-    padding: 14,
-    marginTop: 17,
-    gap: 12,
-  },
-  timeInfo: {
-    flex: 1,
-  },
-  timeLabel: {
-    color: "#315D46",
-    fontSize: 11,
-  },
-  timeValue: {
-    color: "#173D2E",
-    fontSize: 16,
-    fontWeight: "700",
-    marginTop: 4,
-  },
-  estimateDisclaimer: {
-    color: "#718078",
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 10,
-  },
+
   navigationButton: {
     backgroundColor: "#16A36A",
     borderRadius: 14,
@@ -530,13 +612,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
-    marginBottom: 10
+    marginBottom: 10,
   },
+
   navigationButtonText: {
     color: "#FFFFFF",
     fontSize: 15,
     fontWeight: "700",
   },
+
   navigationHint: {
     textAlign: "center",
     fontSize: 11,

@@ -1,4 +1,3 @@
-
 import {
   View,
   Text,
@@ -18,8 +17,7 @@ type RequestItem = {
 };
 
 export default function ViewRequestScreen() {
-  
-    const params = useLocalSearchParams<{
+  const params = useLocalSearchParams<{
     id: string;
     user: string;
     category: string;
@@ -54,54 +52,69 @@ export default function ViewRequestScreen() {
   }
 
   function handleFulfill() {
-  if (!params.id || isNaN(Number(params.id))) {
-    Alert.alert("Erro", "Não foi possível identificar o pedido.");
-    return;
-  }
+    if (!params.id || isNaN(Number(params.id))) {
+      Alert.alert("Erro", "Não foi possível identificar o pedido.");
+      return;
+    }
 
-  Alert.alert(
-    "Confirmar ajuda",
-    `Deseja aceitar o pedido de ${params.user || "este cidadão"}?`,
-    [
-      {
-        text: "Cancelar",
-        style: "cancel",
-      },
-      {
-        text: "Confirmar",
-        onPress: async () => {
-          try {
-            const fulfilledDonation = await fulfillMutation.mutateAsync(
-              Number(params.id)
-            );
-
-            console.log("Pedido aceito:", fulfilledDonation);
-
-            router.replace({
-              pathname: "/OrgScreens/DeliverDonation",
-              params: {
-                requestId: params.id,
-                user: params.user || "",
-                category: params.category || "Não informada",
-                institution: params.institution || "",
-                donorType: "CITIZEN",
-                items: JSON.stringify(items),
-                description: params.description || "",
-              },
-            });
-          } catch (error) {
-            const message =
-              error instanceof Error
-                ? error.message
-                : "Não foi possível aceitar o pedido.";
-
-            Alert.alert("Erro", message);
-          }
+    Alert.alert(
+      "Confirmar ajuda",
+      `Deseja aceitar o pedido de ${params.user || "este cidadão"}?`,
+      [
+        {
+          text: "Cancelar",
+          style: "cancel",
         },
-      },
-    ]
-  );
-}
+        {
+          text: "Confirmar",
+          onPress: async () => {
+            try {
+              const fulfilledDonation = await fulfillMutation.mutateAsync(
+                Number(params.id),
+              );
+
+              console.log("Pedido aceito:", fulfilledDonation);
+
+              router.replace({
+                pathname: "/OrgScreens/DeliverDonation",
+                params: {
+                  requestId: String(fulfilledDonation.id),
+
+                  user: fulfilledDonation.citizenName || params.user || "",
+
+                  category: params.category || "Não informada",
+
+                  institution:
+                    fulfilledDonation.collectionPointName ||
+                    params.institution ||
+                    "",
+
+                  // Endereço de quem solicitou a ajuda
+                  citizenAddress: fulfilledDonation.citizenAddress || "",
+
+                  // Endereço da instituição que aceitou o pedido
+                  institutionAddress:
+                    fulfilledDonation.collectionPointAddress || "",
+
+                  donorType: "CITIZEN",
+                  items: JSON.stringify(fulfilledDonation.items || items),
+                  description:
+                    fulfilledDonation.description || params.description || "",
+                },
+              });
+            } catch (error) {
+              const message =
+                error instanceof Error
+                  ? error.message
+                  : "Não foi possível aceitar o pedido.";
+
+              Alert.alert("Erro", message);
+            }
+          },
+        },
+      ],
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -137,14 +150,8 @@ export default function ViewRequestScreen() {
         {/* Informações do solicitante */}
         <View style={styles.card}>
           <View style={styles.sectionHeading}>
-            <Ionicons
-              name="person-circle-outline"
-              size={21}
-              color="#16A36A"
-            />
-            <Text style={styles.sectionTitle}>
-              Informações do solicitante
-            </Text>
+            <Ionicons name="person-circle-outline" size={21} color="#16A36A" />
+            <Text style={styles.sectionTitle}>Informações do solicitante</Text>
           </View>
 
           <Text style={styles.label}>Nome</Text>
@@ -169,9 +176,7 @@ export default function ViewRequestScreen() {
 
             <View style={styles.infoColumn}>
               <Text style={styles.label}>Data do pedido</Text>
-              <Text style={styles.value}>
-                {params.date || "Não informada"}
-              </Text>
+              <Text style={styles.value}>{params.date || "Não informada"}</Text>
             </View>
           </View>
         </View>
@@ -179,14 +184,8 @@ export default function ViewRequestScreen() {
         {/* Descrição */}
         <View style={styles.card}>
           <View style={styles.sectionHeading}>
-            <Ionicons
-              name="document-text-outline"
-              size={21}
-              color="#16A36A"
-            />
-            <Text style={styles.sectionTitle}>
-              Descrição da necessidade
-            </Text>
+            <Ionicons name="document-text-outline" size={21} color="#16A36A" />
+            <Text style={styles.sectionTitle}>Descrição da necessidade</Text>
           </View>
 
           <Text style={styles.description}>
@@ -228,9 +227,7 @@ export default function ViewRequestScreen() {
                 </View>
 
                 <View style={styles.quantityBadge}>
-                  <Text style={styles.quantityText}>
-                    {item.quantity} un.
-                  </Text>
+                  <Text style={styles.quantityText}>{item.quantity} un.</Text>
                 </View>
               </View>
             ))
@@ -279,9 +276,7 @@ export default function ViewRequestScreen() {
           ) : (
             <>
               <Ionicons name="gift-outline" size={21} color="#FFFFFF" />
-              <Text style={styles.donationButtonText}>
-                Registrar doação
-              </Text>
+              <Text style={styles.donationButtonText}>Registrar doação</Text>
             </>
           )}
         </TouchableOpacity>
