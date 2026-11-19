@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import {
   View,
@@ -10,7 +11,13 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useMyDonations, useCompleteDonation } from "../../hooks/useDonation";
+
+import {
+  useMyRequests,
+  useCompleteDonation,
+  useDeleteDonation,
+} from "../../hooks/useDonation";
+
 import type { DonationStatus } from "../../types/donationTypes";
 
 const filters = ["Todos", "Pendente", "Em atendimento", "Concluído"] as const;
@@ -34,10 +41,8 @@ type HelpRequest = {
   status: RequestStatus;
   reviewNotes: string | null;
   reviewedAt: string | null;
-  items: {
-    name: string;
-    quantity: number;
-  }[];
+  fulfilledByCitizenName: string | null;
+  items: { name: string; quantity: number }[];
 };
 
 function mapDonationStatus(status: DonationStatus): RequestStatus {
@@ -54,28 +59,42 @@ function mapDonationStatus(status: DonationStatus): RequestStatus {
 }
 
 export default function MyRequestsScreen() {
-  const { data, isLoading, isError, refetch, isRefetching } = useMyDonations();
+  // Busca os pedidos criados pelo cidadão
+  const {
+    data,
+    isLoading,
+    isError,
+    refetch,
+    isRefetching,
+  } = useMyRequests();
 
   const completeMutation = useCompleteDonation();
+  const deleteMutation = useDeleteDonation();
 
   const [selectedFilter, setSelectedFilter] = useState<Filter>("Todos");
   const [expandedRequest, setExpandedRequest] = useState<number | null>(null);
 
+  // Converte os dados da API para o formato utilizado na tela
   const requests: HelpRequest[] = (data?.content ?? [])
     .filter((donation) => donation.type === "HELP_REQUEST")
     .map((donation) => ({
       id: donation.id,
       category: [
         ...new Set(
-          donation.items.map((item) => item.categoryLabel ?? item.category),
+          donation.items.map(
+            (item) => item.categoryLabel ?? item.category,
+          ),
         ),
       ].join(", "),
-      institution: donation.collectionPointName ?? "Instituição não informada",
+      institution:
+        donation.collectionPointName ?? "Instituição não informada",
       description: donation.description,
       date: new Date(donation.createdAt).toLocaleDateString("pt-BR"),
       status: mapDonationStatus(donation.status),
       reviewNotes: donation.reviewNotes,
       reviewedAt: donation.reviewedAt,
+      fulfilledByCitizenName:
+        donation.fulfilledByCitizenName ?? null,
       items: donation.items.map((item) => ({
         name: item.name,
         quantity: item.quantity,
@@ -85,13 +104,17 @@ export default function MyRequestsScreen() {
   const filteredRequests =
     selectedFilter === "Todos"
       ? requests
-      : requests.filter((request) => request.status === selectedFilter);
+      : requests.filter(
+          (request) => request.status === selectedFilter,
+        );
 
   function toggleRequest(id: number) {
-    setExpandedRequest((current) => (current === id ? null : id));
+    setExpandedRequest((current) =>
+      current === id ? null : id,
+    );
   }
 
-  function handleCompleteRequest(request: HelpRequest) {
+  async function handleCompleteRequest(request: HelpRequest) {
     Alert.alert(
       "Confirmar recebimento",
       `Você confirma que recebeu a ajuda referente ao pedido #${request.id}? Após a confirmação, o pedido será marcado como concluído.`,
@@ -118,6 +141,46 @@ export default function MyRequestsScreen() {
                 error instanceof Error
                   ? error.message
                   : "Ocorreu um erro ao confirmar o recebimento. Tente novamente.",
+              );
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  function handleDeleteRequest(request: HelpRequest) {
+    Alert.alert(
+      "Excluir pedido",
+      `Tem certeza de que deseja excluir o pedido #${request.id}? Essa ação não poderá ser desfeita.`,
+      [
+        {
+          text: "Manter pedido",
+          style: "cancel",
+        },
+        {
+          text: "Excluir pedido",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteMutation.mutateAsync(request.id);
+
+              if (expandedRequest === request.id) {
+                setExpandedRequest(null);
+              }
+
+              Alert.alert(
+                "Pedido excluído",
+                "Sua solicitação foi excluída com sucesso.",
+              );
+            } catch (error) {
+              console.error("Erro ao excluir pedido:", error);
+
+              Alert.alert(
+                "Não foi possível excluir",
+                error instanceof Error
+                  ? error.message
+                  : "Ocorreu um erro ao excluir o pedido. Tente novamente.",
               );
             }
           },
@@ -197,7 +260,11 @@ export default function MyRequestsScreen() {
               }
             }}
           >
-            <Ionicons name="arrow-back" size={22} color="#173D2E" />
+            <Ionicons
+              name="arrow-back"
+              size={22}
+              color="#173D2E"
+            />
           </TouchableOpacity>
 
           <View style={styles.headerText}>
@@ -212,25 +279,44 @@ export default function MyRequestsScreen() {
             onPress={() => refetch()}
             disabled={isRefetching}
           >
-            <Ionicons name="refresh-outline" size={22} color="#16A36A" />
+            {isRefetching ? (
+              <ActivityIndicator size="small" color="#16A36A" />
+            ) : (
+              <Ionicons
+                name="refresh-outline"
+                size={22}
+                color="#16A36A"
+              />
+            )}
           </TouchableOpacity>
         </View>
 
         {/* Carregamento */}
         {isLoading && (
           <View style={styles.feedbackContainer}>
-            <ActivityIndicator size="large" color="#16A36A" />
-            <Text style={styles.feedbackText}>Carregando seus pedidos...</Text>
+            <ActivityIndicator
+              size="large"
+              color="#16A36A"
+            />
+            <Text style={styles.feedbackText}>
+              Carregando seus pedidos...
+            </Text>
           </View>
         )}
 
         {/* Erro */}
         {isError && !isLoading && (
           <View style={styles.feedbackContainer}>
-            <Ionicons name="alert-circle-outline" size={40} color="#C0392B" />
+            <Ionicons
+              name="alert-circle-outline"
+              size={40}
+              color="#C0392B"
+            />
+
             <Text style={styles.emptyTitle}>
               Não foi possível carregar seus pedidos
             </Text>
+
             <Text style={styles.emptyText}>
               Verifique sua conexão e tente novamente.
             </Text>
@@ -239,8 +325,14 @@ export default function MyRequestsScreen() {
               style={styles.retryButton}
               onPress={() => refetch()}
             >
-              <Ionicons name="refresh-outline" size={18} color="#FFFFFF" />
-              <Text style={styles.evaluateButtonText}>Tentar novamente</Text>
+              <Ionicons
+                name="refresh-outline"
+                size={18}
+                color="#FFFFFF"
+              />
+              <Text style={styles.evaluateButtonText}>
+                Tentar novamente
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -251,7 +343,9 @@ export default function MyRequestsScreen() {
             <View style={styles.summaryCard}>
               <View style={styles.summaryHeader}>
                 <View>
-                  <Text style={styles.summaryTitle}>Seus pedidos</Text>
+                  <Text style={styles.summaryTitle}>
+                    Seus pedidos
+                  </Text>
                   <Text style={styles.summarySubtitle}>
                     Histórico de solicitações
                   </Text>
@@ -268,44 +362,78 @@ export default function MyRequestsScreen() {
 
               <View style={styles.summaryNumbers}>
                 <View style={styles.summaryItem}>
-                  <Text style={styles.summaryNumber}>{requests.length}</Text>
+                  <Text style={styles.summaryNumber}>
+                    {requests.length}
+                  </Text>
                   <Text style={styles.summaryLabel}>Total</Text>
                 </View>
 
                 <View style={styles.summaryDivider} />
 
                 <View style={styles.summaryItem}>
-                  <Text style={[styles.summaryNumber, { color: "#B7791F" }]}>
-                    {requests.filter((r) => r.status === "Pendente").length}
-                  </Text>
-                  <Text style={styles.summaryLabel}>Pendentes</Text>
-                </View>
-
-                <View style={styles.summaryDivider} />
-
-                <View style={styles.summaryItem}>
-                  <Text style={[styles.summaryNumber, { color: "#3478C7" }]}>
+                  <Text
+                    style={[
+                      styles.summaryNumber,
+                      { color: "#B7791F" },
+                    ]}
+                  >
                     {
-                      requests.filter((r) => r.status === "Em atendimento")
-                        .length
+                      requests.filter(
+                        (r) => r.status === "Pendente",
+                      ).length
                     }
                   </Text>
-                  <Text style={styles.summaryLabel}>Em atendimento</Text>
+                  <Text style={styles.summaryLabel}>
+                    Pendentes
+                  </Text>
                 </View>
 
                 <View style={styles.summaryDivider} />
 
                 <View style={styles.summaryItem}>
-                  <Text style={[styles.summaryNumber, { color: "#16A36A" }]}>
-                    {requests.filter((r) => r.status === "Concluído").length}
+                  <Text
+                    style={[
+                      styles.summaryNumber,
+                      { color: "#3478C7" },
+                    ]}
+                  >
+                    {
+                      requests.filter(
+                        (r) => r.status === "Em atendimento",
+                      ).length
+                    }
                   </Text>
-                  <Text style={styles.summaryLabel}>Concluídos</Text>
+                  <Text style={styles.summaryLabel}>
+                    Em atendimento
+                  </Text>
+                </View>
+
+                <View style={styles.summaryDivider} />
+
+                <View style={styles.summaryItem}>
+                  <Text
+                    style={[
+                      styles.summaryNumber,
+                      { color: "#16A36A" },
+                    ]}
+                  >
+                    {
+                      requests.filter(
+                        (r) => r.status === "Concluído",
+                      ).length
+                    }
+                  </Text>
+                  <Text style={styles.summaryLabel}>
+                    Concluídos
+                  </Text>
                 </View>
               </View>
             </View>
 
             {/* Filtros */}
-            <Text style={styles.sectionTitle}>Minhas solicitações</Text>
+            <Text style={styles.sectionTitle}>
+              Minhas solicitações
+            </Text>
 
             <ScrollView
               horizontal
@@ -342,12 +470,20 @@ export default function MyRequestsScreen() {
               filteredRequests.map((request) => {
                 const statusStyle = getStatusColor(request.status);
                 const expanded = expandedRequest === request.id;
+
                 const isCompleting =
                   completeMutation.isPending &&
                   completeMutation.variables === request.id;
 
+                const isDeleting =
+                  deleteMutation.isPending &&
+                  deleteMutation.variables === request.id;
+
                 return (
-                  <View key={request.id} style={styles.requestCard}>
+                  <View
+                    key={request.id}
+                    style={styles.requestCard}
+                  >
                     {/* Cabeçalho do pedido */}
                     <View style={styles.requestHeader}>
                       <View style={styles.categoryIcon}>
@@ -360,8 +496,10 @@ export default function MyRequestsScreen() {
 
                       <View style={styles.requestHeaderInfo}>
                         <Text style={styles.categoryText}>
-                          {request.category || "Categoria não informada"}
+                          {request.category ||
+                            "Categoria não informada"}
                         </Text>
+
                         <Text style={styles.requestDate}>
                           Pedido #{request.id} • {request.date}
                         </Text>
@@ -372,7 +510,9 @@ export default function MyRequestsScreen() {
                     <View
                       style={[
                         styles.statusBadge,
-                        { backgroundColor: statusStyle.background },
+                        {
+                          backgroundColor: statusStyle.background,
+                        },
                       ]}
                     >
                       <Ionicons
@@ -380,8 +520,12 @@ export default function MyRequestsScreen() {
                         size={15}
                         color={statusStyle.text}
                       />
+
                       <Text
-                        style={[styles.statusText, { color: statusStyle.text }]}
+                        style={[
+                          styles.statusText,
+                          { color: statusStyle.text },
+                        ]}
                       >
                         {request.status}
                       </Text>
@@ -396,13 +540,19 @@ export default function MyRequestsScreen() {
                             size={21}
                             color="#16A36A"
                           />
-                          <View style={styles.completionTextContainer}>
+
+                          <View
+                            style={styles.completionTextContainer}
+                          >
                             <Text style={styles.completionTitle}>
                               Já recebeu a ajuda?
                             </Text>
-                            <Text style={styles.completionDescription}>
-                              Confirme o recebimento para concluir sua
-                              solicitação.
+
+                            <Text
+                              style={styles.completionDescription}
+                            >
+                              Confirme o recebimento para concluir
+                              sua solicitação.
                             </Text>
                           </View>
                         </View>
@@ -410,14 +560,20 @@ export default function MyRequestsScreen() {
                         <TouchableOpacity
                           style={[
                             styles.completeButton,
-                            completeMutation.isPending && styles.disabledButton,
+                            completeMutation.isPending &&
+                              styles.disabledButton,
                           ]}
-                          onPress={() => handleCompleteRequest(request)}
+                          onPress={() =>
+                            handleCompleteRequest(request)
+                          }
                           disabled={completeMutation.isPending}
                           activeOpacity={0.8}
                         >
                           {isCompleting ? (
-                            <ActivityIndicator size="small" color="#FFFFFF" />
+                            <ActivityIndicator
+                              size="small"
+                              color="#FFFFFF"
+                            />
                           ) : (
                             <Ionicons
                               name="checkmark-circle-outline"
@@ -441,7 +597,8 @@ export default function MyRequestsScreen() {
                         style={styles.evaluateButton}
                         onPress={() =>
                           router.push({
-                            pathname: "/UserScreens/EvaluateUserScreen",
+                            pathname:
+                              "/UserScreens/EvaluateUserScreen",
                             params: {
                               requestId: String(request.id),
                               institution: request.institution,
@@ -456,6 +613,7 @@ export default function MyRequestsScreen() {
                           size={18}
                           color="#FFFFFF"
                         />
+
                         <Text style={styles.evaluateButtonText}>
                           Avaliar atendimento
                         </Text>
@@ -471,17 +629,48 @@ export default function MyRequestsScreen() {
                         size={18}
                         color="#718078"
                       />
-                      <View style={styles.institutionTextContainer}>
+
+                      <View
+                        style={styles.institutionTextContainer}
+                      >
                         <Text style={styles.smallLabel}>
                           Instituição responsável
                         </Text>
+
                         <Text style={styles.institutionName}>
                           {request.institution}
                         </Text>
                       </View>
                     </View>
 
-                    {/* Detalhes */}
+                    {/* Pessoa que aceitou o pedido */}
+                    {request.fulfilledByCitizenName && (
+                      <View
+                        style={[
+                          styles.institutionRow,
+                          { marginTop: 14 },
+                        ]}
+                      >
+                        <Ionicons
+                          name="person-outline"
+                          size={18}
+                          color="#718078"
+                        />
+
+                        <View
+                          style={styles.institutionTextContainer}
+                        >
+                          <Text style={styles.smallLabel}>
+                            Pessoa que assumiu o pedido
+                          </Text>
+
+                          <Text style={styles.institutionName}>
+                            {request.fulfilledByCitizenName}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+
                     {/* Detalhes */}
                     {expanded && (
                       <View style={styles.detailsContainer}>
@@ -502,7 +691,10 @@ export default function MyRequestsScreen() {
                             key={`${request.id}-${index}`}
                             style={styles.itemRow}
                           >
-                            <Text style={styles.itemName}>{item.name}</Text>
+                            <Text style={styles.itemName}>
+                              {item.name}
+                            </Text>
+
                             <Text style={styles.itemQuantity}>
                               Quantidade: {item.quantity}
                             </Text>
@@ -541,26 +733,76 @@ export default function MyRequestsScreen() {
                       </View>
                     )}
 
+                    {/* Botão de detalhes */}
                     <TouchableOpacity
                       style={styles.detailsButton}
                       onPress={() => toggleRequest(request.id)}
                     >
                       <Text style={styles.detailsButtonText}>
-                        {expanded ? "Ocultar detalhes" : "Ver detalhes"}
+                        {expanded
+                          ? "Ocultar detalhes"
+                          : "Ver detalhes"}
                       </Text>
+
                       <Ionicons
-                        name={expanded ? "chevron-up" : "chevron-down"}
+                        name={
+                          expanded
+                            ? "chevron-up"
+                            : "chevron-down"
+                        }
                         size={17}
                         color="#16A36A"
                       />
                     </TouchableOpacity>
+
+                    {/* Excluir pedido pendente */}
+                    {request.status === "Pendente" && (
+                      <TouchableOpacity
+                        style={[
+                          styles.deleteButton,
+                          isDeleting && styles.disabledButton,
+                        ]}
+                        onPress={() =>
+                          handleDeleteRequest(request)
+                        }
+                        disabled={deleteMutation.isPending}
+                        activeOpacity={0.8}
+                      >
+                        {isDeleting ? (
+                          <ActivityIndicator
+                            size="small"
+                            color="#C0392B"
+                          />
+                        ) : (
+                          <Ionicons
+                            name="trash-outline"
+                            size={18}
+                            color="#C0392B"
+                          />
+                        )}
+
+                        <Text style={styles.deleteButtonText}>
+                          {isDeleting
+                            ? "Excluindo..."
+                            : "Excluir pedido"}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 );
               })
             ) : (
               <View style={styles.emptyContainer}>
-                <Ionicons name="file-tray-outline" size={45} color="#AAB5AE" />
-                <Text style={styles.emptyTitle}>Nenhum pedido encontrado</Text>
+                <Ionicons
+                  name="file-tray-outline"
+                  size={45}
+                  color="#AAB5AE"
+                />
+
+                <Text style={styles.emptyTitle}>
+                  Nenhum pedido encontrado
+                </Text>
+
                 <Text style={styles.emptyText}>
                   Você ainda não possui pedidos com esse status.
                 </Text>
@@ -570,10 +812,19 @@ export default function MyRequestsScreen() {
             {/* Novo pedido */}
             <TouchableOpacity
               style={styles.newRequestButton}
-              onPress={() => router.push("/UserScreens/RequestHelpScreen")}
+              onPress={() =>
+                router.push("/UserScreens/RequestHelpScreen")
+              }
             >
-              <Ionicons name="add-circle-outline" size={21} color="#FFFFFF" />
-              <Text style={styles.newRequestText}>Criar novo pedido</Text>
+              <Ionicons
+                name="add-circle-outline"
+                size={21}
+                color="#FFFFFF"
+              />
+
+              <Text style={styles.newRequestText}>
+                Criar novo pedido
+              </Text>
             </TouchableOpacity>
           </>
         )}
@@ -963,23 +1214,37 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D6EDE0",
   },
-
   reviewHeader: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
     marginBottom: 10,
   },
-
   reviewText: {
     fontSize: 12,
     color: "#52645A",
     lineHeight: 19,
   },
-
   reviewDate: {
     fontSize: 10,
     color: "#89958D",
     marginTop: 10,
+  },
+  deleteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#FDECEC",
+    borderWidth: 1,
+    borderColor: "#F5CCCC",
+    borderRadius: 11,
+    paddingVertical: 11,
+    marginTop: 13,
+  },
+  deleteButtonText: {
+    color: "#C0392B",
+    fontSize: 12,
+    fontWeight: "700",
   },
 });

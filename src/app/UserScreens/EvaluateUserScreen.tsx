@@ -183,7 +183,7 @@ export default function EvaluateScreen() {
         </TouchableOpacity>
 
         <Text style={styles.footerText}>
-          Sua opinião é importante para a comunidade Conecta+.
+          Sua opinião é importante para a comunidade Colabs+.
         </Text>
       </ScrollView>
     </View>

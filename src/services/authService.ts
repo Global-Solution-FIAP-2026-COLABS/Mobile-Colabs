@@ -4,6 +4,7 @@ import {
   saveCitizenId,
   removeCitizenId,
   getToken,
+  saveRole,
 } from "../api/api";
 
 import type {
@@ -11,6 +12,7 @@ import type {
   AccountResponse,
   LoginRequest,
   LoginResponse,
+  
 } from "../types/authTypes";
 
 export async function register(
@@ -29,12 +31,13 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
   });
 
   await saveToken(response.token);
+  await saveRole(response.role);
 
   const savedToken = await getToken();
 
   console.log("TOKEN SALVO:", savedToken ? "SIM" : "NÃO");
   console.log("TOKEN CONFERE:", savedToken === response.token);
-
+  
   if (response.citizenId !== null) {
     await saveCitizenId(response.citizenId);
   } else {

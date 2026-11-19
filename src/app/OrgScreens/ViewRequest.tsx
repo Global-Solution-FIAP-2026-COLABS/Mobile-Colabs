@@ -10,6 +10,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useFulfillDonation } from "../../hooks/useDonation";
+import { getRole } from "../../api/api";
+import { useEffect, useState } from "react";
 
 type RequestItem = {
   name: string;
@@ -28,6 +30,24 @@ export default function ViewRequestScreen() {
     status: string;
     items: string;
   }>();
+
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [roleLoading, setRoleLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadRole() {
+      try {
+        const role = await getRole();
+        setUserRole(role);
+      } catch (error) {
+        console.error("Erro ao identificar usuário:", error);
+      } finally {
+        setRoleLoading(false);
+      }
+    }
+
+    loadRole();
+  }, []);
 
   const fulfillMutation = useFulfillDonation();
 
@@ -57,9 +77,18 @@ export default function ViewRequestScreen() {
       return;
     }
 
+    if (!userRole) {
+      Alert.alert("Erro", "Não foi possível identificar seu tipo de usuário.");
+      return;
+    }
+
+    const isCitizen = userRole === "CITIZEN";
+
     Alert.alert(
-      "Confirmar ajuda",
-      `Deseja aceitar o pedido de ${params.user || "este cidadão"}?`,
+      isCitizen ? "Confirmar ajuda" : "Registrar atendimento",
+      isCitizen
+        ? `Deseja ajudar ${params.user || "este cidadão"} com este pedido?`
+        : `Deseja assumir o pedido de ${params.user || "este cidadão"}?`,
       [
         {
           text: "Cancelar",
@@ -75,6 +104,24 @@ export default function ViewRequestScreen() {
 
               console.log("Pedido aceito:", fulfilledDonation);
 
+              // Cidadão: não abre a tela de entrega institucional
+              if (isCitizen) {
+                Alert.alert(
+                  "Ajuda confirmada!",
+                  "Você agora está responsável por ajudar esta pessoa. Obrigado por contribuir!",
+                  [
+                    {
+                      text: "OK",
+                      onPress: () =>
+                        router.replace("/OrgScreens/FindRequests"),
+                    },
+                  ],
+                );
+
+                return;
+              }
+
+              // Instituição: mantém o fluxo atual
               router.replace({
                 pathname: "/OrgScreens/DeliverDonation",
                 params: {
@@ -89,15 +136,15 @@ export default function ViewRequestScreen() {
                     params.institution ||
                     "",
 
-                  // Endereço de quem solicitou a ajuda
                   citizenAddress: fulfilledDonation.citizenAddress || "",
 
-                  // Endereço da instituição que aceitou o pedido
                   institutionAddress:
                     fulfilledDonation.collectionPointAddress || "",
 
                   donorType: "CITIZEN",
+
                   items: JSON.stringify(fulfilledDonation.items || items),
+
                   description:
                     fulfilledDonation.description || params.description || "",
                 },
@@ -265,18 +312,26 @@ export default function ViewRequestScreen() {
         <TouchableOpacity
           style={[
             styles.donationButton,
-            fulfillMutation.isPending && styles.donationButtonDisabled,
+            (fulfillMutation.isPending || roleLoading) &&
+              styles.donationButtonDisabled,
           ]}
           onPress={handleFulfill}
-          disabled={fulfillMutation.isPending}
+          disabled={fulfillMutation.isPending || roleLoading || !userRole}
           activeOpacity={0.85}
         >
           {fulfillMutation.isPending ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
             <>
-              <Ionicons name="gift-outline" size={21} color="#FFFFFF" />
-              <Text style={styles.donationButtonText}>Registrar doação</Text>
+              <Ionicons
+                name={userRole === "CITIZEN" ? "heart-outline" : "gift-outline"}
+                size={21}
+                color="#FFFFFF"
+              />
+
+              <Text style={styles.donationButtonText}>
+                {userRole === "CITIZEN" ? "Quero ajudar" : "Registrar doação"}
+              </Text>
             </>
           )}
         </TouchableOpacity>

@@ -6,6 +6,8 @@ const TOKEN_KEY = "@colabs:token";
 
 const CITIZEN_ID_KEY = "@colabs:citizenId";
 
+const ROLE_KEY = "@colabs:role";
+
 export class ApiError extends Error {
   status: number;
 
@@ -45,7 +47,20 @@ export async function clearSession() {
   await Promise.all([
     removeToken(),
     removeCitizenId(),
+    removeRole(),
   ]);
+}
+
+export async function saveRole(role: string) {
+  await AsyncStorage.setItem(ROLE_KEY, role);
+}
+
+export async function getRole(): Promise<string | null> {
+  return AsyncStorage.getItem(ROLE_KEY);
+}
+
+export async function removeRole() {
+  await AsyncStorage.removeItem(ROLE_KEY);
 }
 
 export async function apiFetch<T>(

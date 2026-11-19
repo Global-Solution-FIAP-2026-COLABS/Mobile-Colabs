@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import {
   View,
@@ -7,7 +8,9 @@ import {
   ActivityIndicator,
   Alert,
   TextInput,
+  ScrollView,
 } from "react-native";
+
 import { router } from "expo-router";
 import MapView, { Marker, Region } from "react-native-maps";
 import * as Location from "expo-location";
@@ -200,6 +203,7 @@ export default function HomeScreen() {
     };
   }, [donations]);
 
+  // Pesquisa por endereço, CEP ou coordenadas
   async function handleSearch() {
     const value = searchText.trim();
 
@@ -241,7 +245,9 @@ export default function HomeScreen() {
         const cep = value.replace(/\D/g, "");
 
         if (/^\d{8}$/.test(cep)) {
-          const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+          const response = await fetch(
+            `https://viacep.com.br/ws/${cep}/json/`,
+          );
 
           if (!response.ok) {
             throw new Error("Não foi possível consultar o CEP.");
@@ -301,9 +307,11 @@ export default function HomeScreen() {
     }
   }
 
+  // Obtém a localização atual do usuário
   async function getUserLocation() {
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
+      const { status } =
+        await Location.requestForegroundPermissionsAsync();
 
       if (status !== "granted") {
         setHasLocationPermission(false);
@@ -352,22 +360,29 @@ export default function HomeScreen() {
   const loadingMapData = loadingPoints || loadingDonations;
 
   return (
-    <View style={styles.container}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.scrollContent}
+      showsVerticalScrollIndicator={true}
+      keyboardShouldPersistTaps="handled"
+    >
       {/* Cabeçalho */}
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Olá!</Text>
-          <Text style={styles.subtitle}>Como podemos ajudar hoje?</Text>
-        </View>
-
-        <View style={styles.logoContainer}>
-          <Ionicons name="heart" size={25} color="#16A36A" />
+          <Text style={styles.subtitle}>
+            Como podemos ajudar hoje?
+          </Text>
         </View>
       </View>
 
       {/* Pesquisa */}
       <View style={styles.searchContainer}>
-        <Ionicons name="search-outline" size={21} color="#718078" />
+        <Ionicons
+          name="search-outline"
+          size={21}
+          color="#718078"
+        />
 
         <TextInput
           style={styles.searchInput}
@@ -387,7 +402,11 @@ export default function HomeScreen() {
           {searching ? (
             <ActivityIndicator color="#FFFFFF" size="small" />
           ) : (
-            <Ionicons name="arrow-forward" size={20} color="#FFFFFF" />
+            <Ionicons
+              name="arrow-forward"
+              size={20}
+              color="#FFFFFF"
+            />
           )}
         </TouchableOpacity>
       </View>
@@ -460,12 +479,22 @@ export default function HomeScreen() {
         {/* Legenda */}
         <View style={styles.legend}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, styles.institutionDot]} />
+            <View
+              style={[
+                styles.legendDot,
+                styles.institutionDot,
+              ]}
+            />
             <Text style={styles.legendText}>Instituições</Text>
           </View>
 
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, styles.requestDot]} />
+            <View
+              style={[
+                styles.legendDot,
+                styles.requestDot,
+              ]}
+            />
             <Text style={styles.legendText}>Pedidos de ajuda</Text>
           </View>
         </View>
@@ -496,7 +525,11 @@ export default function HomeScreen() {
             onPress={handleDonate}
             activeOpacity={0.8}
           >
-            <Ionicons name="gift-outline" size={25} color="#FFFFFF" />
+            <Ionicons
+              name="gift-outline"
+              size={25}
+              color="#FFFFFF"
+            />
             <Text style={styles.buttonText}>Fazer doação</Text>
           </TouchableOpacity>
 
@@ -505,32 +538,104 @@ export default function HomeScreen() {
             onPress={handleRequestHelp}
             activeOpacity={0.8}
           >
-            <Ionicons name="hand-left-outline" size={25} color="#16A36A" />
-            <Text style={styles.helpButtonText}>Solicitar ajuda</Text>
+            <Ionicons
+              name="hand-left-outline"
+              size={25}
+              color="#16A36A"
+            />
+            <Text style={styles.helpButtonText}>
+              Solicitar ajuda
+            </Text>
           </TouchableOpacity>
         </View>
 
+        {/* Acompanhar pedidos */}
         <TouchableOpacity
           style={styles.trackButton}
           onPress={() => router.push("/UserScreens/UserRequests")}
         >
-          <Ionicons name="clipboard-outline" size={21} color="#16A36A" />
+          <Ionicons
+            name="clipboard-outline"
+            size={21}
+            color="#16A36A"
+          />
 
-          <Text style={styles.trackButtonText}>Acompanhar meus pedidos</Text>
+          <Text style={styles.trackButtonText}>
+            Acompanhar meus pedidos
+          </Text>
 
-          <Ionicons name="chevron-forward" size={19} color="#16A36A" />
+          <Ionicons
+            name="chevron-forward"
+            size={19}
+            color="#16A36A"
+          />
         </TouchableOpacity>
 
+        {/* Minhas doações */}
+        <TouchableOpacity
+          style={styles.myDonationsButton}
+          onPress={() =>
+            router.push("/UserScreens/MyDonationsScreen")
+          }
+        >
+          <Ionicons
+            name="gift-outline"
+            size={21}
+            color="#166fa3"
+          />
+
+          <Text style={styles.myDonationsButtonText}>
+            Minhas doações
+          </Text>
+
+          <Ionicons
+            name="chevron-forward"
+            size={19}
+            color="#166fa3"
+          />
+        </TouchableOpacity>
+
+        {/* Sobre o App */}
+        <TouchableOpacity
+          style={styles.aboutButton}
+          onPress={() => router.push("/sobre-app")}
+          activeOpacity={0.75}
+        >
+          <Ionicons
+            name="information-circle-outline"
+            size={20}
+            color="#16A36A"
+          />
+
+          <Text style={styles.aboutButtonText}>
+            Sobre o App
+          </Text>
+
+          <Ionicons
+            name="chevron-forward"
+            size={18}
+            color="#16A36A"
+          />
+        </TouchableOpacity>
+
+        {/* Sair da conta */}
         <TouchableOpacity
           style={styles.logoutButton}
           onPress={handleLogout}
           activeOpacity={0.75}
         >
-          <Ionicons name="log-out-outline" size={21} color="#DC2626" />
-          <Text style={styles.logoutButtonText}>Sair da conta</Text>
+          <Ionicons
+            name="log-out-outline"
+            size={21}
+            color="#DC2626"
+          />
+
+          <Text style={styles.logoutButtonText}>
+            Sair da conta
+          </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 
@@ -539,6 +644,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8FAFC",
   },
+
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 30,
+  },
+
   header: {
     paddingHorizontal: 22,
     paddingTop: 55,
@@ -547,35 +658,31 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+
   greeting: {
     fontSize: 25,
     fontWeight: "800",
     color: "#173D2E",
   },
+
   subtitle: {
     fontSize: 14,
     color: "#718078",
     marginTop: 4,
   },
-  logoContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: "#E5F5EC",
-    alignItems: "center",
-    justifyContent: "center",
-  },
+
   mapContainer: {
-    flex: 1,
+    height: 350,
     marginHorizontal: 16,
     borderRadius: 22,
     overflow: "hidden",
-    minHeight: 250,
   },
+
   map: {
     width: "100%",
     height: "100%",
   },
+
   locationLoading: {
     position: "absolute",
     top: 15,
@@ -589,10 +696,12 @@ const styles = StyleSheet.create({
     gap: 8,
     elevation: 3,
   },
+
   loadingText: {
     fontSize: 12,
     color: "#52645A",
   },
+
   legend: {
     position: "absolute",
     bottom: 14,
@@ -603,42 +712,51 @@ const styles = StyleSheet.create({
     gap: 9,
     elevation: 3,
   },
+
   legendItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
+
   legendDot: {
     width: 11,
     height: 11,
     borderRadius: 6,
   },
+
   institutionDot: {
     backgroundColor: "#16A36A",
   },
+
   requestDot: {
     backgroundColor: "#F59E0B",
   },
+
   legendText: {
     color: "#52645A",
     fontSize: 11,
     fontWeight: "600",
   },
+
   actionsContainer: {
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 28,
   },
+
   sectionTitle: {
     fontSize: 16,
     fontWeight: "700",
     color: "#173D2E",
     marginBottom: 15,
   },
+
   buttonsContainer: {
     flexDirection: "row",
     gap: 12,
   },
+
   donateButton: {
     flex: 1,
     backgroundColor: "#16A36A",
@@ -648,6 +766,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 7,
   },
+
   helpButton: {
     flex: 1,
     backgroundColor: "#FFFFFF",
@@ -659,16 +778,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 7,
   },
+
   buttonText: {
     color: "#FFFFFF",
     fontSize: 13,
     fontWeight: "700",
   },
+
   helpButtonText: {
     color: "#16A36A",
     fontSize: 13,
     fontWeight: "700",
   },
+
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -683,12 +805,14 @@ const styles = StyleSheet.create({
     borderColor: "#E5EDE8",
     gap: 10,
   },
+
   searchInput: {
     flex: 1,
     fontSize: 13,
     color: "#173D2E",
     height: "100%",
   },
+
   searchButton: {
     width: 42,
     height: 42,
@@ -697,6 +821,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   trackButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -704,15 +829,54 @@ const styles = StyleSheet.create({
     gap: 10,
     backgroundColor: "#E5F5EC",
     borderRadius: 15,
-    padding: 16,
+    padding: 14,
     marginTop: 12,
   },
+
   trackButtonText: {
     color: "#16A36A",
     fontSize: 13,
     fontWeight: "700",
     flex: 1,
   },
+
+  myDonationsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#EFF6FF",
+    borderWidth: 1,
+    borderColor: "#BFDBFE",
+    borderRadius: 15,
+    padding: 14,
+    marginTop: 12,
+  },
+
+  myDonationsButtonText: {
+    color: "#2563EB",
+    fontSize: 13,
+    fontWeight: "700",
+    flex: 1,
+  },
+
+  aboutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E5F5EC",
+    borderRadius: 14,
+    padding: 14,
+    gap: 10,
+    marginTop: 12,
+  },
+
+  aboutButtonText: {
+    flex: 1,
+    color: "#173D2E",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
   logoutButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -725,11 +889,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#FECACA",
   },
+
   logoutButtonText: {
     color: "#DC2626",
     fontSize: 14,
     fontWeight: "700",
   },
+
   errorText: {
     color: "#DC2626",
     fontSize: 12,

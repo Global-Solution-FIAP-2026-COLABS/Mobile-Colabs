@@ -58,7 +58,7 @@ export default function HomeInstitutionScreen() {
         {/* Cabeçalho */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.brand}>Conecta+</Text>
+            <Text style={styles.brand}>Colabs+</Text>
             <Text style={styles.welcome}>Olá, Instituição!</Text>
             <Text style={styles.subtitle}>
               Sua ajuda transforma comunidades.
@@ -69,6 +69,8 @@ export default function HomeInstitutionScreen() {
             <Ionicons name="business-outline" size={24} color="#16A36A" />
           </TouchableOpacity>
         </View>
+
+        
 
         {/* Painel de resumo */}
         <View style={styles.summaryCard}>
@@ -141,6 +143,19 @@ export default function HomeInstitutionScreen() {
             </TouchableOpacity>
           ))}
         </View>
+        <TouchableOpacity
+          style={styles.aboutButton}
+          onPress={() => router.push("/sobre-app")}
+          activeOpacity={0.75}
+        >
+          <Ionicons
+            name="information-circle-outline"
+            size={20}
+            color="#16A36A"
+          />
+          <Text style={styles.aboutButtonText}>Sobre o App</Text>
+          <Ionicons name="chevron-forward" size={18} color="#16A36A" />
+        </TouchableOpacity>
         <TouchableOpacity
           style={styles.logoutButton}
           onPress={handleLogout}
@@ -371,6 +386,21 @@ const styles = StyleSheet.create({
   logoutButtonText: {
     color: "#DC2626",
     fontSize: 14,
+    fontWeight: "700",
+  },
+  aboutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#E5F5EC",
+    borderRadius: 14,
+    padding: 15,
+    gap: 10,
+    marginTop:20
+  },
+  aboutButtonText: {
+    flex: 1,
+    color: "#173D2E",
+    fontSize: 13,
     fontWeight: "700",
   },
 });

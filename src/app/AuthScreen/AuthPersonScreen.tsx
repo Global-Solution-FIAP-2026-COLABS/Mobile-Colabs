@@ -162,7 +162,7 @@ export default function AuthPersonScreen() {
               <Text style={styles.logoIcon}>♡</Text>
             </View>
 
-            <Text style={styles.appName}>Conecta+</Text>
+            <Text style={styles.appName}>Colabs+</Text>
 
             <Text style={styles.title}>Crie sua conta</Text>
 

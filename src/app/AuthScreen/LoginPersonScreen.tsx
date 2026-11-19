@@ -51,7 +51,7 @@ export default function LoginPersonScreen() {
         password,
       });
 
-      Alert.alert("Login realizado!", "Bem-vindo ao Conecta+.", [
+      Alert.alert("Login realizado!", "Bem-vindo ao Colabs+.", [
         {
           text: "Continuar",
           onPress: () => router.replace("/UserScreens/HomeUserScreen"),
@@ -93,7 +93,7 @@ export default function LoginPersonScreen() {
               <Text style={styles.logoIcon}>♡</Text>
             </View>
 
-            <Text style={styles.appName}>Conecta+</Text>
+            <Text style={styles.appName}>Colabs+</Text>
 
             <Text style={styles.title}>Bem-vindo de volta!</Text>
 
@@ -161,7 +161,7 @@ export default function LoginPersonScreen() {
             </View>
 
             <Text style={styles.footerText}>
-              Conecta+ — Juntos podemos transformar vidas.
+              Colabs+ — Juntos podemos transformar vidas.
             </Text>
           </View>
         </View>

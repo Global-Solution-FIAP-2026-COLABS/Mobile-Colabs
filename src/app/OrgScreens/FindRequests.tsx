@@ -1,4 +1,3 @@
-import { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -11,7 +10,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-
+import { useEffect, useMemo, useState } from "react";
+import { getRole } from "../../api/api";
 import {
   useCommunityDonations,
   useFulfillDonation,
@@ -63,6 +63,9 @@ export default function FindRequestsScreen() {
   const [selectedCategory, setSelectedCategory] = useState("Todas");
   const [selectedInstitution, setSelectedInstitution] = useState("Todas");
   const [itemType, setItemType] = useState("");
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [roleLoading, setRoleLoading] = useState(true);
+
 
   const { data, isLoading, isError, error, refetch, isRefetching } =
     useCommunityDonations();
@@ -70,6 +73,21 @@ export default function FindRequestsScreen() {
   const fulfillMutation = useFulfillDonation();
 
   const requests = data?.content ?? [];
+
+  useEffect(() => {
+  async function loadUserRole() {
+    try {
+      const role = await getRole();
+      setUserRole(role);
+    } catch (error) {
+      console.error("Erro ao carregar papel do usuário:", error);
+    } finally {
+      setRoleLoading(false);
+    }
+  }
+
+  loadUserRole();
+}, []);
 
   // Instituições disponíveis
   const institutionOptions = useMemo(() => {
@@ -126,54 +144,68 @@ export default function FindRequestsScreen() {
   }
 
   // Assumir pedido
-  async function handleFulfill(request: DonationResponse) {
-    Alert.alert(
-      "Confirmar ajuda",
-      `Deseja aceitar o pedido de ${request.citizenName}?`,
-      [
-        {
-          text: "Cancelar",
-          style: "cancel",
-        },
-        {
-          text: "Confirmar",
-          onPress: async () => {
-            try {
-              await fulfillMutation.mutateAsync(request.id);
+async function handleFulfill(request: DonationResponse) {
+  const isCitizen = userRole === "CITIZEN";
 
-              router.push({
-                pathname: "/OrgScreens/DeliverDonation",
-                params: {
-                  requestId: String(request.id),
-                  user: request.citizenName,
-                  category:
-                    request.aiSuggestedCategory ??
-                    request.items?.[0]?.categoryLabel ??
-                    "Não informada",
-                  institution: request.collectionPointName ?? "",
-                  donorType: "CITIZEN",
-                  items: JSON.stringify(
-                    (request.items ?? []).map((item) => ({
-                      name: item.name,
-                      quantity: item.quantity,
-                    })),
-                  ),
-                  description: request.description ?? "",
-                },
-              } as any);
-            } catch (error) {
-              const message =
-                error instanceof Error
-                  ? error.message
-                  : "Não foi possível aceitar o pedido.";
+  Alert.alert(
+    isCitizen ? "Confirmar ajuda" : "Confirmar atendimento",
+    isCitizen
+      ? `Deseja ajudar ${request.citizenName} com este pedido?`
+      : `Deseja assumir o pedido de ${request.citizenName}?`,
+    [
+      {
+        text: "Cancelar",
+        style: "cancel",
+      },
+      {
+        text: "Confirmar",
+        onPress: async () => {
+          try {
+            await fulfillMutation.mutateAsync(request.id);
 
-              Alert.alert("Erro", message);
+            if (isCitizen) {
+              Alert.alert(
+                "Ajuda confirmada!",
+                "Você aceitou ajudar esta pessoa. Obrigado por fazer parte dessa iniciativa!",
+              );
+
+              return;
             }
-          },
+
+            // Fluxo já existente para instituições
+            router.push({
+              pathname: "/OrgScreens/DeliverDonation",
+              params: {
+                requestId: String(request.id),
+                user: request.citizenName,
+                category:
+                  request.aiSuggestedCategory ??
+                  request.items?.[0]?.categoryLabel ??
+                  "Não informada",
+                institution: request.collectionPointName ?? "",
+                donorType: "CITIZEN",
+                items: JSON.stringify(
+                  (request.items ?? []).map((item) => ({
+                    name: item.name,
+                    quantity: item.quantity,
+                  })),
+                ),
+                description: request.description ?? "",
+              },
+            } as any);
+          } catch (error) {
+            const message =
+              error instanceof Error
+                ? error.message
+                : "Não foi possível aceitar o pedido.";
+
+            Alert.alert("Erro", message);
+          }
         },
-      ],
-    );
-  }
+      },
+    ],
+  );
+}
 
   // Abrir detalhes
   function openRequest(request: DonationResponse) {
@@ -465,7 +497,6 @@ export default function FindRequestsScreen() {
                     <Ionicons name="arrow-forward" size={18} color="#16A36A" />
                   </View>
                 </TouchableOpacity>
-
               </View>
             );
           })

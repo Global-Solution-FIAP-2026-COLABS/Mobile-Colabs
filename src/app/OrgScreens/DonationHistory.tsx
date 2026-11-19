@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import {
   View,
@@ -11,7 +10,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 
-import { useMyDonations } from "../../hooks/useDonation";
+import { useInstitutionDonations } from "../../hooks/useDonation";
 
 type DonationItem = {
   name: string;
@@ -25,6 +24,7 @@ type Donation = {
   items: DonationItem[];
   status: "Concluída" | "Em andamento";
   date: string;
+  reviewNotes: string | null;
 };
 
 type Filter = "Todas" | "Em andamento" | "Concluídas";
@@ -32,23 +32,16 @@ type Filter = "Todas" | "Em andamento" | "Concluídas";
 export default function DonationHistory() {
   const [filter, setFilter] = useState<Filter>("Todas");
 
-  const {
-    data,
-    isLoading,
-    isError,
-    refetch,
-    isRefetching,
-  } = useMyDonations();
+  const { data, isLoading, isError, refetch, isRefetching } =
+    useInstitutionDonations();
 
-  // Filtra somente pedidos de ajuda vinculados à instituição.
-  // Exibe pedidos em andamento e pedidos entregues.
+  // Pedidos de ajuda vinculados à instituição.
   const donations: Donation[] = (data?.content ?? [])
     .filter(
       (donation) =>
         donation.type === "HELP_REQUEST" &&
         donation.collectionPointId != null &&
-        (donation.status === "IN_PROGRESS" ||
-          donation.status === "DELIVERED")
+        (donation.status === "IN_PROGRESS" || donation.status === "DELIVERED"),
     )
     .map((donation) => ({
       id: String(donation.id),
@@ -61,13 +54,11 @@ export default function DonationHistory() {
         name: item.name,
         quantity: item.quantity,
       })),
-      status:
-        donation.status === "DELIVERED"
-          ? "Concluída"
-          : "Em andamento",
+      status: donation.status === "DELIVERED" ? "Concluída" : "Em andamento",
       date: donation.createdAt
         ? new Date(donation.createdAt).toLocaleDateString("pt-BR")
         : "Data não informada",
+      reviewNotes: donation.reviewNotes || null,
     }));
 
   const filteredDonations = donations.filter((donation) => {
@@ -81,11 +72,11 @@ export default function DonationHistory() {
   });
 
   const completedCount = donations.filter(
-    (donation) => donation.status === "Concluída"
+    (donation) => donation.status === "Concluída",
   ).length;
 
   const inProgressCount = donations.filter(
-    (donation) => donation.status === "Em andamento"
+    (donation) => donation.status === "Em andamento",
   ).length;
 
   function handleBack() {
@@ -100,9 +91,7 @@ export default function DonationHistory() {
     return (
       <View style={styles.stateContainer}>
         <ActivityIndicator size="large" color="#16A36A" />
-        <Text style={styles.stateText}>
-          Carregando histórico de doações...
-        </Text>
+        <Text style={styles.stateText}>Carregando histórico de doações...</Text>
       </View>
     );
   }
@@ -110,11 +99,7 @@ export default function DonationHistory() {
   if (isError) {
     return (
       <View style={styles.stateContainer}>
-        <Ionicons
-          name="cloud-offline-outline"
-          size={45}
-          color="#A0ADA5"
-        />
+        <Ionicons name="cloud-offline-outline" size={45} color="#A0ADA5" />
 
         <Text style={styles.emptyTitle}>
           Não foi possível carregar o histórico
@@ -124,19 +109,11 @@ export default function DonationHistory() {
           Verifique sua conexão e tente novamente.
         </Text>
 
-        <TouchableOpacity
-          style={styles.retryButton}
-          onPress={() => refetch()}
-        >
-          <Text style={styles.retryButtonText}>
-            Tentar novamente
-          </Text>
+        <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
+          <Text style={styles.retryButtonText}>Tentar novamente</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.backLink}
-          onPress={handleBack}
-        >
+        <TouchableOpacity style={styles.backLink} onPress={handleBack}>
           <Text style={styles.backLinkText}>Voltar</Text>
         </TouchableOpacity>
       </View>
@@ -147,20 +124,13 @@ export default function DonationHistory() {
     <View style={styles.container}>
       {/* Cabeçalho */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={handleBack}
-        >
+        <TouchableOpacity style={styles.backButton} onPress={handleBack}>
           <Ionicons name="arrow-back" size={23} color="#173D2E" />
         </TouchableOpacity>
 
         <View style={styles.headerTextContainer}>
-          <Text style={styles.headerTitle}>
-            Histórico de doações
-          </Text>
-          <Text style={styles.headerSubtitle}>
-            Acompanhe suas entregas
-          </Text>
+          <Text style={styles.headerTitle}>Histórico de doações</Text>
+          <Text style={styles.headerSubtitle}>Acompanhe suas entregas</Text>
         </View>
 
         <TouchableOpacity
@@ -168,11 +138,7 @@ export default function DonationHistory() {
           onPress={() => refetch()}
           disabled={isRefetching}
         >
-          <Ionicons
-            name="refresh-outline"
-            size={22}
-            color="#173D2E"
-          />
+          <Ionicons name="refresh-outline" size={22} color="#173D2E" />
         </TouchableOpacity>
       </View>
 
@@ -183,35 +149,19 @@ export default function DonationHistory() {
         {/* Resumo */}
         <View style={styles.summaryContainer}>
           <View style={styles.summaryCard}>
-            <Ionicons
-              name="gift-outline"
-              size={25}
-              color="#16A36A"
-            />
+            <Ionicons name="gift-outline" size={25} color="#16A36A" />
 
-            <Text style={styles.summaryNumber}>
-              {donations.length}
-            </Text>
+            <Text style={styles.summaryNumber}>{donations.length}</Text>
 
-            <Text style={styles.summaryLabel}>
-              Total de pedidos
-            </Text>
+            <Text style={styles.summaryLabel}>Total de pedidos</Text>
           </View>
 
           <View style={styles.summaryCard}>
-            <Ionicons
-              name="time-outline"
-              size={25}
-              color="#B7791F"
-            />
+            <Ionicons name="time-outline" size={25} color="#B7791F" />
 
-            <Text style={styles.summaryNumber}>
-              {inProgressCount}
-            </Text>
+            <Text style={styles.summaryNumber}>{inProgressCount}</Text>
 
-            <Text style={styles.summaryLabel}>
-              Em andamento
-            </Text>
+            <Text style={styles.summaryLabel}>Em andamento</Text>
           </View>
 
           <View style={styles.summaryCard}>
@@ -221,50 +171,40 @@ export default function DonationHistory() {
               color="#16A36A"
             />
 
-            <Text style={styles.summaryNumber}>
-              {completedCount}
-            </Text>
+            <Text style={styles.summaryNumber}>{completedCount}</Text>
 
-            <Text style={styles.summaryLabel}>
-              Concluídas
-            </Text>
+            <Text style={styles.summaryLabel}>Concluídas</Text>
           </View>
         </View>
 
         {/* Filtros */}
         <View style={styles.filters}>
-          {(["Todas", "Em andamento", "Concluídas"] as Filter[]).map(
-            (item) => (
-              <TouchableOpacity
-                key={item}
+          {(["Todas", "Em andamento", "Concluídas"] as Filter[]).map((item) => (
+            <TouchableOpacity
+              key={item}
+              style={[
+                styles.filterButton,
+                filter === item && styles.activeFilter,
+              ]}
+              onPress={() => setFilter(item)}
+            >
+              <Text
                 style={[
-                  styles.filterButton,
-                  filter === item && styles.activeFilter,
+                  styles.filterText,
+                  filter === item && styles.activeFilterText,
                 ]}
-                onPress={() => setFilter(item)}
               >
-                <Text
-                  style={[
-                    styles.filterText,
-                    filter === item && styles.activeFilterText,
-                  ]}
-                >
-                  {item}
-                </Text>
-              </TouchableOpacity>
-            )
-          )}
+                {item}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
 
         {/* Lista */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>
-            Pedidos da instituição
-          </Text>
+          <Text style={styles.sectionTitle}>Pedidos da instituição</Text>
 
-          {isRefetching && (
-            <ActivityIndicator size="small" color="#16A36A" />
-          )}
+          {isRefetching && <ActivityIndicator size="small" color="#16A36A" />}
         </View>
 
         {filteredDonations.length > 0 ? (
@@ -272,13 +212,9 @@ export default function DonationHistory() {
             <View key={donation.id} style={styles.donationCard}>
               <View style={styles.cardHeader}>
                 <View style={styles.requesterContainer}>
-                  <Text style={styles.donationId}>
-                    Pedido #{donation.id}
-                  </Text>
+                  <Text style={styles.donationId}>Pedido #{donation.id}</Text>
 
-                  <Text style={styles.requester}>
-                    {donation.requester}
-                  </Text>
+                  <Text style={styles.requester}>{donation.requester}</Text>
                 </View>
 
                 <View
@@ -305,40 +241,23 @@ export default function DonationHistory() {
               <View style={styles.divider} />
 
               <View style={styles.infoRow}>
-                <Ionicons
-                  name="grid-outline"
-                  size={17}
-                  color="#718078"
-                />
+                <Ionicons name="grid-outline" size={17} color="#718078" />
 
-                <Text style={styles.infoText}>
-                  {donation.category}
-                </Text>
+                <Text style={styles.infoText}>{donation.category}</Text>
               </View>
 
               <View style={styles.infoRow}>
-                <Ionicons
-                  name="calendar-outline"
-                  size={17}
-                  color="#718078"
-                />
+                <Ionicons name="calendar-outline" size={17} color="#718078" />
 
-                <Text style={styles.infoText}>
-                  {donation.date}
-                </Text>
+                <Text style={styles.infoText}>{donation.date}</Text>
               </View>
 
               <View style={styles.itemsContainer}>
-                <Text style={styles.itemsTitle}>
-                  Itens solicitados
-                </Text>
+                <Text style={styles.itemsTitle}>Itens solicitados</Text>
 
                 {donation.items.length > 0 ? (
                   donation.items.map((item, index) => (
-                    <Text
-                      key={`${item.name}-${index}`}
-                      style={styles.itemText}
-                    >
+                    <Text key={`${item.name}-${index}`} style={styles.itemText}>
                       • {item.name} — {item.quantity} unidade(s)
                     </Text>
                   ))
@@ -348,19 +267,32 @@ export default function DonationHistory() {
                   </Text>
                 )}
               </View>
+              {/* Avaliação do usuário */}
+              {donation.status === "Concluída" && (
+                <View style={styles.reviewContainer}>
+                  <View style={styles.reviewHeader}>
+                    <Ionicons
+                      name="chatbubble-ellipses-outline"
+                      size={17}
+                      color="#16A36A"
+                    />
+
+                    <Text style={styles.reviewTitle}>Avaliação do usuário</Text>
+                  </View>
+
+                  <Text style={styles.reviewText}>
+                    {donation.reviewNotes ||
+                      "O usuário ainda não deixou uma avaliação."}
+                  </Text>
+                </View>
+              )}
             </View>
           ))
         ) : (
           <View style={styles.emptyContainer}>
-            <Ionicons
-              name="file-tray-outline"
-              size={45}
-              color="#A0ADA5"
-            />
+            <Ionicons name="file-tray-outline" size={45} color="#A0ADA5" />
 
-            <Text style={styles.emptyTitle}>
-              Nenhum pedido encontrado
-            </Text>
+            <Text style={styles.emptyTitle}>Nenhum pedido encontrado</Text>
 
             <Text style={styles.emptyText}>
               Não existem pedidos nesta categoria vinculados à instituição.
@@ -617,4 +549,26 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
   },
+  reviewContainer: {
+  backgroundColor: "#E5F5EC",
+  padding: 12,
+  borderRadius: 10,
+  marginTop: 12,
+},
+reviewHeader: {
+  flexDirection: "row",
+  alignItems: "center",
+  gap: 8,
+  marginBottom: 7,
+},
+reviewTitle: {
+  fontSize: 12,
+  fontWeight: "700",
+  color: "#173D2E",
+},
+reviewText: {
+  fontSize: 13,
+  color: "#52635A",
+  lineHeight: 19,
+},
 });

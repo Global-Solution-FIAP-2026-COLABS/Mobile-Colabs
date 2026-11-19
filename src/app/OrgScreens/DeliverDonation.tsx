@@ -16,6 +16,8 @@ import * as Location from "expo-location";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 
+import { getRole } from "../../api/api";
+
 type Coordinates = {
   latitude: number;
   longitude: number;
@@ -182,6 +184,34 @@ export default function DeliverDonation() {
     }
   }
 
+async function handleTrackDonations() {
+  try {
+    const role = await getRole();
+
+    console.log("PERFIL LIDO DO STORAGE:", role);
+
+    if (role === "ROLE_CITIZEN") {
+      router.replace("/UserScreens/MyDonationsScreen");
+      return;
+    }
+
+    if (role === "ROLE_POINT_MANAGER") {
+      router.replace("/OrgScreens/DonationHistory");
+      return;
+    }
+
+    if (role === "ROLE_ADMIN") {
+      Alert.alert("Atenção", "O histórico do administrador ainda não está disponível.");
+      return;
+    }
+
+    Alert.alert("Erro", "Não foi possível identificar seu perfil.");
+  } catch (error) {
+    console.log("ERRO AO BUSCAR PERFIL:", error);
+    Alert.alert("Erro", "Não foi possível acessar seu histórico.");
+  }
+}
+
   // Abre o Google Maps com os endereços reais.
   function openGoogleMaps() {
     if (!selectedDelivery) return;
@@ -229,25 +259,6 @@ export default function DeliverDonation() {
         </View>
       </View>
     );
-  }
-
-  function handleCompleteDelivery() {
-    if (!selectedDelivery) return;
-
-    router.replace({
-      pathname: "/OrgScreens/DonationHistory",
-      params: {
-        requestId: String(selectedDelivery.id),
-        user: selectedDelivery.requester,
-        category: selectedDelivery.category,
-        address: selectedDelivery.address,
-        phone: "",
-        description: selectedDelivery.description,
-        items: JSON.stringify(selectedDelivery.items),
-        status: "Concluída",
-        completedAt: new Date().toISOString(),
-      },
-    } as any);
   }
 
   const mapCenter = institutionLocation || citizenLocation;
@@ -410,10 +421,12 @@ export default function DeliverDonation() {
         {/* Navegação */}
         <TouchableOpacity
           style={styles.navigationButton}
-          onPress={() => {router.replace("/OrgScreens/DonationHistory")}}
+          onPress={handleTrackDonations}
           activeOpacity={0.85}
         >
-          <Text style={styles.navigationButtonText}>Acompanhar doações</Text>
+          <Text style={styles.navigationButtonText}>
+            Acompanhar minhas doações
+          </Text>
         </TouchableOpacity>
 
         <Text style={styles.navigationHint}>

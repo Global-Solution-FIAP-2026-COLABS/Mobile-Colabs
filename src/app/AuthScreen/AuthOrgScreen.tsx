@@ -171,7 +171,7 @@ export default function AuthOrgScreen() {
               <Text style={styles.logoIcon}>♡</Text>
             </View>
 
-            <Text style={styles.appName}>Conecta+</Text>
+            <Text style={styles.appName}>Colabs+</Text>
 
             <Text style={styles.title}>Cadastre sua instituição</Text>
 

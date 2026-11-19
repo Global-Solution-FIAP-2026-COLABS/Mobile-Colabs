@@ -99,7 +99,7 @@ export default function LoginOrgScreen() {
               <Text style={styles.logoIcon}>♡</Text>
             </View>
 
-            <Text style={styles.appName}>Conecta+</Text>
+            <Text style={styles.appName}>Colabs+</Text>
 
             <Text style={styles.title}>Bem-vindo de volta!</Text>
 
@@ -158,7 +158,7 @@ export default function LoginOrgScreen() {
             </View>
 
             <Text style={styles.footerText}>
-              Conecta+ — Juntos podemos transformar vidas.
+              Colabs+ — Juntos podemos transformar vidas.
             </Text>
           </View>
         </View>
