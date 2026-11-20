@@ -26,7 +26,7 @@ https://youtu.be/NC52s-Sr4HQ
 
 ## 🔗 Link para a publicação do App
 
-[INSERIR LINK DA PUBLICAÇÃO]
+https://appdistribution.firebase.dev/i/90bd764b02a6c4b5
 
 ---
 

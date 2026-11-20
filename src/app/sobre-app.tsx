@@ -130,7 +130,7 @@ export default function SobreAppScreen() {
 
           <View style={styles.hashContainer}>
             <Text style={styles.hash} selectable>
-              a05eded*
+              e920b78
             </Text>
           </View>
 
