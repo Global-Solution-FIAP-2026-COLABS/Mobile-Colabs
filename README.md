@@ -12,7 +12,7 @@
 
 GitHub:
 
-https://github.com/Challenge-2TDSPX-2026/ProntPet-Pipelines-Sprint4
+https://github.com/Global-Solution-FIAP-2026-COLABS/Mobile-Colabs
 
 ---
 
