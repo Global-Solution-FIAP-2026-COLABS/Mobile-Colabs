@@ -3,8 +3,8 @@
 ## 👨‍👩‍👧‍👦 Integrantes do Grupo
 
 * **Gustavo Araujo da Silva** – RM: 566526
-* **[Nome do integrante]** – RM: [RM]
-* **[Nome do integrante]** – RM: [RM]
+* **Guilherme Santos Fonseca** – RM: 564232
+* **Anthony de Souza Henriques** – RM: 566188
 
 ---
 
@@ -12,7 +12,7 @@
 
 GitHub:
 
-[INSERIR LINK DO REPOSITÓRIO]
+https://github.com/Challenge-2TDSPX-2026/ProntPet-Pipelines-Sprint4
 
 ---
 
@@ -20,7 +20,7 @@ GitHub:
 
 YouTube:
 
-[INSERIR LINK DO VÍDEO]
+https://youtu.be/NC52s-Sr4HQ
 
 ---
 

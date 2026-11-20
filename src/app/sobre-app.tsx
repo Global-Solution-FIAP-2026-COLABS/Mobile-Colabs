@@ -130,7 +130,7 @@ export default function SobreAppScreen() {
 
           <View style={styles.hashContainer}>
             <Text style={styles.hash} selectable>
-              {COMMIT_HASH}
+              a05eded*
             </Text>
           </View>
 
